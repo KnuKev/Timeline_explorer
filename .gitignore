@@ -1,0 +1,42 @@
+# Dependencies and build output
+node_modules/
+dist/
+dist-ssr/
+coverage/
+*.local
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Local source downloads used to rebuild static geographic reference data
+.cache/
+
+# Personal Google Timeline / Takeout exports (location history is sensitive)
+/Takeout/
+/Semantic Location History/
+/Records.json
+/Timeline.json
+/timeline-data/
+
+# Editor and operating-system files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
