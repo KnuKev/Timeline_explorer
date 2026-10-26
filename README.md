@@ -4,7 +4,7 @@ Explore your Google Timeline history on an interactive map. Load a Timeline JSON
 
 ## Run locally
 
-1. Open this folder in VS Code.
+1. Navigate to project folder.
 2. Open the integrated terminal.
 3. Install dependencies and start the development server:
 
