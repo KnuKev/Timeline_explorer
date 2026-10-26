@@ -1,4 +1,4 @@
-# Spor — Timeline Map
+Timeline Explorer
 
 Explore your Google Timeline history on an interactive map. Load a Timeline JSON export to view recorded locations and routes by date, country, or city, with summaries and travel statistics.
 
