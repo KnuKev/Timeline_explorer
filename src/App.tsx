@@ -4,11 +4,11 @@ import L from 'leaflet'
 import tzLookup from 'tz-lookup'
 import {
   distanceKm,
-  formatLongDate,
   localDateKey,
   parseTimeline,
   type TimelinePoint,
 } from './timeline'
+import { displayCountryName, displayPointLabel, formatDateKey, formatTimestamp, localeFor, readLanguage, strings, type Language } from './i18n'
 import { type PlaceAnalysis, type CityReference, type PlaceEntry } from './places'
 import './App.css'
 
@@ -53,40 +53,34 @@ function MapViewport({ points }: { points: TimelinePoint[] }) {
       maxZoom: points.length === 1 ? 14 : 15,
       animate: points.length < 5000,
     })
-  }, [map, points])
+  }, [isDark, map, points])
 
   return null
 }
 
-function formatPlaceDate(dateKey: string): string {
-  return new Intl.DateTimeFormat('no-NO', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(dateKey + 'T12:00:00'))
+function formatPlaceDate(dateKey: string, language: Language): string {
+  return formatDateKey(dateKey, language, { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function formatPointDateTime(timestamp: string): string {
-  return new Intl.DateTimeFormat('no-NO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(timestamp))
+function formatPointDateTime(timestamp: string, language: Language): string {
+  return formatTimestamp(timestamp, language, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-function formatPointDateTimeAtLocation(timestamp: string, lat: number, lng: number): string {
+function formatPointDateTimeAtLocation(timestamp: string, lat: number, lng: number, language: Language): string {
   let timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
   try {
     timeZone = tzLookup(lat, lng)
   } catch {
     // Keep the browser's local zone if the coordinate is outside the lookup data.
   }
-  return new Intl.DateTimeFormat('no-NO', {
-    timeZone,
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(timestamp))
+  return formatTimestamp(timestamp, language, {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  }, timeZone)
 }
 
-function formatDistance(kilometers: number): string {
+function formatDistance(kilometers: number, language: Language): string {
   if (kilometers < 1) return Math.round(kilometers * 1000) + ' m'
-  return kilometers.toLocaleString('no-NO', { maximumFractionDigits: 1 }) + ' km'
+  return kilometers.toLocaleString(localeFor[language], { maximumFractionDigits: 1 }) + ' km'
 }
 
 function samplePoints(points: TimelinePoint[], maximum: number): TimelinePoint[] {
@@ -152,7 +146,7 @@ function smoothRoute(points: TimelinePoint[]): [number, number][] {
   }
   return result
 }
-function PointDots({ points }: { points: TimelinePoint[] }) {
+function PointDots({ points, isDark }: { points: TimelinePoint[]; isDark: boolean }) {
   const map = useMap()
 
   useEffect(() => {
@@ -178,8 +172,8 @@ function PointDots({ points }: { points: TimelinePoint[] }) {
       for (const point of markerPoints) {
         const pixel = map.latLngToContainerPoint([point.lat, point.lng])
         context.beginPath()
-        context.arc(pixel.x, pixel.y, 2.2, 0, Math.PI * 2)
-        context.fillStyle = '#d9534f'
+        context.arc(pixel.x, pixel.y, isDark ? 2.6 : 2.2, 0, Math.PI * 2)
+        context.fillStyle = getComputedStyle(map.getContainer()).getPropertyValue('--point-color').trim() || (isDark ? '#4fd39a' : '#d9534f')
         context.fill()
         context.lineWidth = 1
         context.strokeStyle = '#fff'
@@ -204,11 +198,13 @@ function PointDots({ points }: { points: TimelinePoint[] }) {
       if (pendingFrame) cancelAnimationFrame(pendingFrame)
       canvas.remove()
     }
-  }, [map, points])
+  }, [isDark, map, points])
 
   return null
 }
 function App() {
+  const [language, setLanguage] = useState<Language>(readLanguage)
+  const ui = strings[language]
   const [points, setPoints] = useState<TimelinePoint[]>(demoPoints)
   const [activeTab, setActiveTab] = useState<ActiveTab>('map')
   const [placeMode, setPlaceMode] = useState<'countries' | 'cities'>('countries')
@@ -216,7 +212,7 @@ function App() {
   const [countryCodes, setCountryCodes] = useState<Record<string, string>>({})
   const [placeAnalysis, setPlaceAnalysis] = useState<PlaceAnalysis | null>(null)
   const [placesLoading, setPlacesLoading] = useState(true)
-  const [placesError, setPlacesError] = useState('')
+  const [placesError, setPlacesError] = useState<'load' | 'analysis' | ''>('')
   const [placeScope, setPlaceScope] = useState<PlaceScope | null>(null)
   const [placeViewEnabled, setPlaceViewEnabled] = useState(false)
   const [isDemo, setIsDemo] = useState(true)
@@ -227,8 +223,14 @@ function App() {
   const [fromDate, setFromDate] = useState('2026-10-13')
   const [toDate, setToDate] = useState('2026-10-13')
   const [fileName, setFileName] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState<'coordinates' | 'json' | ''>('')
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null)
+
+  useEffect(() => {
+    try { localStorage.setItem('timeline-explorer-language', language) } catch { /* Storage may be unavailable in private browsing. */ }
+    document.documentElement.lang = language === 'en' ? 'en' : 'no'
+    document.title = language === 'en' ? 'Timeline Explorer' : 'Timeline Explorer — Tidslinjekart'
+  }, [language])
 
   useEffect(() => {
     let cancelled = false
@@ -238,7 +240,7 @@ function App() {
     ]).then(([cities, codes]) => {
       if (!cancelled) { setCityReferences(cities); setCountryCodes(codes); setPlacesLoading(false) }
     }).catch(() => {
-      if (!cancelled) { setPlacesError('Stedsdataene kunne ikke lastes. Prøv å laste siden på nytt.'); setPlacesLoading(false) }
+      if (!cancelled) { setPlacesError('load'); setPlacesLoading(false) }
     })
     return () => { cancelled = true }
   }, [])
@@ -248,7 +250,7 @@ function App() {
     setPlacesLoading(true)
     const worker = new Worker(new URL('./places.worker.ts', import.meta.url), { type: 'module' })
     worker.onmessage = (event: MessageEvent<PlaceAnalysis>) => { setPlaceAnalysis(event.data); setPlacesLoading(false) }
-    worker.onerror = () => { setPlacesError('Punktene kunne ikke sorteres geografisk. Prøv å laste Timeline-filen på nytt.'); setPlacesLoading(false); worker.terminate() }
+    worker.onerror = () => { setPlacesError('analysis'); setPlacesLoading(false); worker.terminate() }
     worker.postMessage({ points, cities: cityReferences, countryCodes })
     return () => worker.terminate()
   }, [cityReferences, countryCodes, points])
@@ -273,8 +275,19 @@ function App() {
   const places = placeMode === 'countries' ? placeAnalysis?.countries ?? [] : placeAnalysis?.cities ?? []
   const mainPlaces = places.filter((place) => place.pointCount >= 10)
   const fewerPlaces = places.filter((place) => place.pointCount < 10)
-  const renderPlaceCard = (place: PlaceEntry, index: number) => <button key={place.key} type="button" className="place-card" onClick={() => { setPlaceScope({ kind: placeMode === 'countries' ? 'country' : 'city', key: place.key, name: place.name, countryName: place.countryName, pointIds: place.pointIds }); setPlaceViewEnabled(true); setActiveTab('map'); setSelectedPointId(null) }}><span className="place-rank">{String(index + 1).padStart(2, '0')}</span><span className="place-card-copy"><strong>{place.name}</strong><small>{placeMode === 'cities' ? place.countryName : 'Land'}</small></span><span className="place-days"><strong>{place.days.toLocaleString('no-NO')}</strong><small>dager</small></span><span className="place-dates"><small>{place.dates.length > 1 ? 'Siste datoer' : 'Dato'}</small><span>{place.dates.slice(0, 3).map(formatPlaceDate).join(' · ') + (place.dates.length > 3 ? ' · +' + (place.dates.length - 3) : '')}</span></span><span className="place-card-footer">{place.pointCount.toLocaleString('no-NO')} posisjonspunkter <span>↗</span></span></button>
+  const renderPlaceCard = (place: PlaceEntry, index: number) => {
+    const placeName = placeMode === 'countries' ? displayCountryName(place.countryCode, place.name, language) : place.name
+    const placeCountry = displayCountryName(place.countryCode, place.countryName ?? '', language)
+    return <button key={place.key} type="button" className="place-card" onClick={() => { setPlaceScope({ kind: placeMode === 'countries' ? 'country' : 'city', key: place.key, name: placeName, countryName: placeCountry, pointIds: place.pointIds }); setPlaceViewEnabled(true); setActiveTab('map'); setSelectedPointId(null) }}>
+      <span className="place-rank">{String(index + 1).padStart(2, '0')}</span>
+      <span className="place-card-copy"><strong>{placeName}</strong><small>{placeMode === 'cities' ? placeCountry : ui.country}</small></span>
+      <span className="place-days"><strong>{place.days.toLocaleString(localeFor[language])}</strong><small>{ui.days}</small></span>
+      <span className="place-dates"><small>{place.dates.length > 1 ? ui.recentDates : ui.date}</small><span>{place.dates.slice(0, 3).map((date) => formatPlaceDate(date, language)).join(' · ') + (place.dates.length > 3 ? ' · +' + (place.dates.length - 3) : '')}</span></span>
+      <span className="place-card-footer">{place.pointCount.toLocaleString(localeFor[language])} {ui.positionPoints} <span>↗</span></span>
+    </button>
+  }
   const selectedPoint = mapPoints.find((point) => point.id === selectedPointId) ?? null
+  const scopedPlaceName = placeScope ? (placeScope.kind === 'country' ? displayCountryName(placeScope.key, placeScope.name, language) : placeScope.name) : ''
   const routePoints = useMemo(
     () => selectSpatiallyDistributedPoints(mapPoints, MAX_ROUTE_INPUT_POINTS, MAX_ROUTE_POINTS_PER_GRID_CELL),
     [mapPoints],
@@ -292,10 +305,10 @@ function App() {
     return Array.from(groups, ([day, dayPoints]) => ({ day, points: dayPoints }))
   }, [mapPoints])
   const displayedDate = dateMode === 'day'
-    ? formatLongDate(selectedDate)
+    ? formatDateKey(selectedDate, language, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     : fromDate === toDate
-      ? formatLongDate(fromDate)
-      : formatLongDate(fromDate) + ' – ' + formatLongDate(toDate)
+      ? formatDateKey(fromDate, language, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      : formatDateKey(fromDate, language, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ' – ' + formatDateKey(toDate, language, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
   const handleFile = async (file?: File) => {
     if (!file) return
@@ -303,7 +316,7 @@ function App() {
     try {
       const parsed = parseTimeline(JSON.parse(await file.text()))
       if (parsed.length === 0) {
-        setError('Fant ingen gjenkjennelige koordinater. Kontroller at dette er en Google Timeline JSON-fil.')
+        setError('coordinates')
         return
       }
       setPoints(parsed)
@@ -323,7 +336,7 @@ function App() {
       setPlaceViewEnabled(false)
       setActiveTab('map')
     } catch {
-      setError('Filen kunne ikke leses som gyldig JSON.')
+      setError('json')
     }
   }
 
@@ -337,32 +350,37 @@ function App() {
     <main className={'app-shell' + (isDark ? ' dark' : '')}>
       <header className="topbar">
         <div className="topbar-title">
-          <span className="eyebrow">DIN HISTORIKK</span>
-          <strong>Utforsk steder</strong>
+          <span className="eyebrow">{ui.history}</span>
+          <strong>{ui.explorePlaces}</strong>
         </div>
 
-        <nav className="main-nav" aria-label="Hovedmeny">
-          <button className={'nav-item' + (activeTab === 'map' ? ' is-current' : '')} type="button" onClick={() => setActiveTab('map')}>Kart</button>
-          <button className="nav-item" type="button" disabled title="Kommer senere">Reiser</button>
-          <button className={'nav-item' + (activeTab === 'places' ? ' is-current' : '')} type="button" onClick={() => setActiveTab('places')}>Steder</button>
-          <button className="nav-item" type="button" disabled title="Kommer senere">Statistikk</button>
+        <nav className="main-nav" aria-label={language === 'en' ? 'Main navigation' : 'Hovedmeny'}>
+          <button className={'nav-item' + (activeTab === 'map' ? ' is-current' : '')} type="button" onClick={() => setActiveTab('map')}>{ui.map}</button>
+          <button className="nav-item" type="button" disabled title={ui.comingSoon}>{ui.trips}</button>
+          <button className={'nav-item' + (activeTab === 'places' ? ' is-current' : '')} type="button" onClick={() => setActiveTab('places')}>{ui.places}</button>
+          <button className="nav-item" type="button" disabled title={ui.comingSoon}>{ui.statistics}</button>
         </nav>
 
         <div className="topbar-right">
-          <span className="privacy-pill"><span className="privacy-dot" /> Lokal fil</span>
-          <button className="theme-toggle" type="button" aria-label={isDark ? 'Bytt til lyst tema' : 'Bytt til mørkt tema'} title={isDark ? 'Lyst tema' : 'Mørkt tema'} onClick={() => setIsDark((current) => !current)}>{isDark ? '☀' : '☾'}</button>
+          <span className="privacy-pill"><span className="privacy-dot" /> {ui.localFile}</span>
+          <div className="language-switch" role="group" aria-label={language === 'en' ? 'Language' : 'Språk'}>
+            <button type="button" className={language === 'en' ? 'selected' : ''} aria-pressed={language === 'en'} onClick={() => setLanguage('en')}>ENG</button>
+            <button type="button" className={language === 'no' ? 'selected' : ''} aria-pressed={language === 'no'} onClick={() => setLanguage('no')}>NOR</button>
+          </div>
+          <button className="theme-toggle" type="button" aria-label={isDark ? ui.switchToLight : ui.switchToDark} title={isDark ? ui.lightTheme : ui.darkTheme} onClick={() => setIsDark((current) => !current)}>{isDark ? '☀' : '☾'}</button>
         </div>
       </header>
 
       {activeTab === 'places' ? (
         <div className="places-page">
-          <div className="places-page-heading"><div><span className="eyebrow">HELE TIDSLINJEN</span><h1>Steder</h1><p>Utforsk hvor du har vært, sortert etter antall dager med registreringer.</p></div><div className="places-total"><strong>{places.length.toLocaleString('no-NO')}</strong><span>{placeMode === 'countries' ? 'land registrert' : 'byer registrert'}</span></div></div>
-          <div className="places-tabs" role="tablist" aria-label="Velg stedstype"><button type="button" role="tab" aria-selected={placeMode === 'countries'} className={placeMode === 'countries' ? 'selected' : ''} onClick={() => setPlaceMode('countries')}>Land <span>{placeAnalysis?.countries.length ?? '–'}</span></button><button type="button" role="tab" aria-selected={placeMode === 'cities'} className={placeMode === 'cities' ? 'selected' : ''} onClick={() => setPlaceMode('cities')}>Byer <span>{placeAnalysis?.cities.length ?? '–'}</span></button></div>
-          {placesLoading && <div className="places-message"><span className="places-spinner" /> Analyserer registreringene dine lokalt …</div>}{placesError && <div className="places-message places-error">{placesError}</div>}
-          {!placesLoading && !placesError && places.length === 0 && <div className="places-empty"><span>⌖</span><strong>Ingen steder å vise ennå</strong><p>Importer Timeline-filen din fra Kart-fanen for å analysere flere steder.</p><button type="button" className="primary-button" onClick={() => setActiveTab('map')}>Gå til kartet</button></div>}
+          <div className="places-page-heading"><div><span className="eyebrow">{ui.wholeTimeline}</span><h1>{ui.places}</h1><p>{ui.placesDescription}</p></div><div className="places-total"><strong>{places.length.toLocaleString(localeFor[language])}</strong><span>{placeMode === 'countries' ? ui.countriesRecorded : ui.citiesRecorded}</span></div></div>
+          <div className="places-tabs" role="tablist" aria-label={ui.choosePlaceType}><button type="button" role="tab" aria-selected={placeMode === 'countries'} className={placeMode === 'countries' ? 'selected' : ''} onClick={() => setPlaceMode('countries')}>{ui.countries} <span>{placeAnalysis?.countries.length ?? '–'}</span></button><button type="button" role="tab" aria-selected={placeMode === 'cities'} className={placeMode === 'cities' ? 'selected' : ''} onClick={() => setPlaceMode('cities')}>{ui.cities} <span>{placeAnalysis?.cities.length ?? '–'}</span></button></div>
+          {placesLoading && <div className="places-message"><span className="places-spinner" /> {ui.analyzing}</div>}
+          {placesError && <div className="places-message places-error">{placesError === 'load' ? ui.placeDataError : ui.placeAnalysisError}</div>}
+          {!placesLoading && !placesError && places.length === 0 && <div className="places-empty"><span>⌖</span><strong>{ui.noPlaces}</strong><p>{ui.importToAnalyze}</p><button type="button" className="primary-button" onClick={() => setActiveTab('map')}>{ui.goToMap}</button></div>}
           {!placesLoading && mainPlaces.length > 0 && <div className="places-grid">{mainPlaces.map(renderPlaceCard)}</div>}
-          {!placesLoading && fewerPlaces.length > 0 && <details className="fewer-places"><summary><span>Vis steder med færre enn 10 punkter</span><span className="count-badge">{fewerPlaces.length}</span></summary><p>Disse stedene kan være korte overflygninger eller unøyaktige GPS-treff.</p><div className="places-grid">{fewerPlaces.map((place, index) => renderPlaceCard(place, mainPlaces.length + index))}</div></details>}
-          <footer className="places-attribution">Byforslag fra <a href="https://www.geonames.org/" target="_blank" rel="noreferrer">GeoNames</a> (CC BY 4.0) · GeoNames-steder fra 2&nbsp;500 innbyggere + Stabekk · nærmeste sted innen 30 km. All posisjonsanalyse skjer lokalt.</footer>
+          {!placesLoading && fewerPlaces.length > 0 && <details className="fewer-places"><summary><span>{ui.fewerPlaces}</span><span className="count-badge">{fewerPlaces.length.toLocaleString(localeFor[language])}</span></summary><p>{ui.fewerPlacesHint}</p><div className="places-grid">{fewerPlaces.map((place, index) => renderPlaceCard(place, mainPlaces.length + index))}</div></details>}
+          <footer className="places-attribution">{ui.citySuggestions} <a href="https://www.geonames.org/" target="_blank" rel="noreferrer">GeoNames</a> (CC BY 4.0) · {ui.cityRules}</footer>
         </div>
       ) : (
       <div className="workspace">
@@ -370,11 +388,11 @@ function App() {
           <section className="import-card">
             <div className="import-icon" aria-hidden="true">↑</div>
             <div className="import-copy">
-              <strong>{fileName || 'Importer Timeline'}</strong>
-              <span>{isDemo ? 'Prøv med eksempeldatasett' : 'JSON-filen er lastet inn'}</span>
+              <strong>{fileName || ui.importTimeline}</strong>
+              <span>{isDemo ? ui.tryExample : ui.jsonLoaded}</span>
             </div>
             <label className="import-button">
-              {isDemo ? 'Velg fil' : 'Bytt fil'}
+              {isDemo ? ui.chooseFile : ui.replaceFile}
               <input
                 type="file"
                 accept=".json,application/json"
@@ -382,27 +400,27 @@ function App() {
               />
             </label>
           </section>
-          {error && <p className="error-message" role="alert">{error}</p>}
+          {error && <p className="error-message" role="alert">{error === 'coordinates' ? ui.invalidCoordinates : ui.invalidJson}</p>}
 
           <section className="date-section">
             <div className="section-title-row">
-              <h2>Tidspunkt</h2>
+              <h2>{ui.time}</h2>
               <button className="quiet-button" type="button" onClick={() => {
                 if (availableDays.length) {
                   setDateMode('day')
                   setSelectedDate(availableDays[availableDays.length - 1]!)
                 }
-              }}>Siste dag</button>
+              }}>{ui.latestDay}</button>
             </div>
 
-            <div className="segmented-control" role="tablist" aria-label="Velg tidsrom">
+            <div className="segmented-control" role="tablist" aria-label={ui.chooseTimeRange}>
               <button
                 type="button"
                 role="tab"
                 aria-selected={dateMode === 'day'}
                 className={dateMode === 'day' ? 'selected' : ''}
                 onClick={() => setDateMode('day')}
-              >En dag</button>
+              >{ui.oneDay}</button>
               <button
                 type="button"
                 role="tab"
@@ -419,15 +437,15 @@ function App() {
                   }
                   setDateMode('period')
                 }}
-              >Periode</button>
+              >{ui.period}</button>
             </div>
 
             {dateMode === 'day' ? (
               <div className="date-picker-wrap">
                 <div className="date-nav">
-                  <button type="button" aria-label="Forrige dag" onClick={() => shiftDay(-1)} disabled={availableDays.indexOf(selectedDate) <= 0}>‹</button>
+                  <button type="button" aria-label={ui.previousDay} onClick={() => shiftDay(-1)} disabled={availableDays.indexOf(selectedDate) <= 0}>‹</button>
                   <label htmlFor="selected-day">{displayedDate}</label>
-                  <button type="button" aria-label="Neste dag" onClick={() => shiftDay(1)} disabled={availableDays.indexOf(selectedDate) < 0 || availableDays.indexOf(selectedDate) >= availableDays.length - 1}>›</button>
+                  <button type="button" aria-label={ui.nextDay} onClick={() => shiftDay(1)} disabled={availableDays.indexOf(selectedDate) < 0 || availableDays.indexOf(selectedDate) >= availableDays.length - 1}>›</button>
                 </div>
                 <input
                   id="selected-day"
@@ -436,30 +454,30 @@ function App() {
                   value={selectedDate}
                   onChange={(event) => setSelectedDate(event.target.value)}
                 />
-                <div className="date-hint">{availableDays.length} dager med registreringer</div>
+                <div className="date-hint">{availableDays.length} {ui.daysWithRecords}</div>
               </div>
             ) : (
               <div className="period-fields">
-                <label>Fra<input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></label>
-                <label>Til<input type="date" value={toDate} min={fromDate} onChange={(event) => setToDate(event.target.value)} /></label>
-                <p>{placeViewEnabled && placeScope ? mapPoints.length.toLocaleString('no-NO') + ' punkter i hele ' + (placeScope.kind === 'country' ? 'landet' : 'byen') : mapPoints.length.toLocaleString('no-NO') + ' punkter i valgt periode'}</p>
+                <label>{ui.from}<input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></label>
+                <label>{ui.to}<input type="date" value={toDate} min={fromDate} onChange={(event) => setToDate(event.target.value)} /></label>
+                <p>{placeViewEnabled && placeScope ? mapPoints.length.toLocaleString(localeFor[language]) + ' ' + (placeScope.kind === 'country' ? ui.pointsInCountry : ui.pointsInCity) : mapPoints.length.toLocaleString(localeFor[language]) + ' ' + ui.pointsInRange}</p>
               </div>
             )}
           </section>
 
           <section className="summary-section">
             <div className="section-title-row">
-              <h2>Oppsummering</h2>
-              <span className="summary-period">{placeViewEnabled && placeScope ? 'HELE HISTORIKKEN' : dateMode === 'day' ? 'VALGT DAG' : 'VALGT PERIODE'}</span>
+              <h2>{ui.summary}</h2>
+              <span className="summary-period">{placeViewEnabled && placeScope ? ui.allHistory : dateMode === 'day' ? ui.selectedDay : ui.selectedRange}</span>
             </div>
             <div className="summary-grid">
               <div className="summary-card">
                 <span className="summary-icon pin-icon">⌖</span>
-                <div><strong>{mapPoints.length.toLocaleString('no-NO')}</strong><span>punkter</span></div>
+                <div><strong>{mapPoints.length.toLocaleString(localeFor[language])}</strong><span>{ui.points}</span></div>
               </div>
               <div className="summary-card">
                 <span className="summary-icon route-icon">↗</span>
-                <div><strong>{formatDistance(mapDistance)}</strong><span>estimert rute</span></div>
+                <div><strong>{formatDistance(mapDistance, language)}</strong><span>{ui.estimatedRoute}</span></div>
               </div>
             </div>
           </section>
@@ -467,28 +485,28 @@ function App() {
           <section className="activity-section">
             <div className="point-list-card">
               <div className="point-list-card-header">
-                <h2>{placeViewEnabled && placeScope ? `Punkter i ${placeScope.name}` : dateMode === 'day' ? 'Punkter denne dagen' : 'Punkter i perioden'}</h2>
+                <h2>{placeViewEnabled && placeScope ? ui.pointsIn + ' ' + scopedPlaceName : dateMode === 'day' ? ui.pointsToday : ui.pointsInPeriod}</h2>
                 <span className="count-badge">{mapPoints.length}</span>
               </div>
               {isPointListExpanded && <div className="point-list" id="point-list">
                 {pointGroups.map((group) => (
                   <details className="point-day-group" key={group.day} open={pointGroups.length === 1}>
-                    <summary><strong>{formatLongDate(group.day)}</strong><span className="count-badge">{group.points.length}</span></summary>
+                    <summary><strong>{formatDateKey(group.day, language, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</strong><span className="count-badge">{group.points.length}</span></summary>
                     <div className="point-day-rows">
                       {group.points.slice(0, 80).map((point, index) => (
                         <button key={point.id} type="button" className={'point-row' + (point.id === selectedPointId ? ' active' : '')} onClick={() => setSelectedPointId(point.id)}>
                           <span className={'point-symbol ' + (point.kind === 'visit' ? 'visit' : '')}>{point.kind === 'visit' ? '•' : index + 1}</span>
-                          <span className="point-copy"><strong>{point.label}</strong><small>{formatPointDateTime(point.timestamp)} · {point.lat.toFixed(4)}, {point.lng.toFixed(4)}</small></span>
+                          <span className="point-copy"><strong>{displayPointLabel(point.label, language)}</strong><small>{formatPointDateTime(point.timestamp, language)} · {point.lat.toFixed(4)}, {point.lng.toFixed(4)}</small></span>
                           <span className="point-arrow">›</span>
                         </button>
                       ))}
-                      {group.points.length > 80 && <p className="list-note">Viser 80 av {group.points.length.toLocaleString('no-NO')} punkter denne dagen.</p>}
+                      {group.points.length > 80 && <p className="list-note">{ui.showing.replace('{count}', group.points.length.toLocaleString(localeFor[language]))}</p>}
                     </div>
                   </details>
                 ))}
-                {mapPoints.length === 0 && <div className="empty-list"><span>⌖</span><strong>Ingen punkter i dette utvalget</strong><small>Velg en dato eller et sted med registreringer.</small></div>}
+                {mapPoints.length === 0 && <div className="empty-list"><span>⌖</span><strong>{ui.noPoints}</strong><small>{ui.chooseDateOrPlace}</small></div>}
               </div>}
-              <button className="point-list-disclosure" type="button" aria-expanded={isPointListExpanded} aria-controls="point-list" aria-label={isPointListExpanded ? 'Skjul punkter' : 'Vis punkter'} title={isPointListExpanded ? 'Skjul punkter' : 'Vis punkter'} onClick={() => setIsPointListExpanded((expanded) => !expanded)}>
+              <button className="point-list-disclosure" type="button" aria-expanded={isPointListExpanded} aria-controls="point-list" aria-label={isPointListExpanded ? ui.hidePoints : ui.showPoints} title={isPointListExpanded ? ui.hidePoints : ui.showPoints} onClick={() => setIsPointListExpanded((expanded) => !expanded)}>
                 <svg className={'expand-chevron' + (isPointListExpanded ? ' expanded' : '')} viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"><path d="M4 3 L47 13 L50 15 L53 13 L96 3 L96 8.25 L53 18.5 L50 20.5 L47 18.5 L4 8.25 Z" /></svg>
               </button>
             </div>
@@ -496,11 +514,11 @@ function App() {
 
           <footer className="sidebar-footer">
             <span className="shield-icon">◇</span>
-            <span><strong>Historikken leses lokalt</strong><small>Kartfliser lastes fra OpenStreetMap.</small></span>
+            <span><strong>{ui.readLocally}</strong><small>{ui.mapTiles}</small></span>
           </footer>
         </aside>
 
-        <section className="map-area" aria-label="Kart med posisjonshistorikk">
+        <section className="map-area" aria-label={ui.mapWithHistory}>
           <MapContainer className="map-view" center={[59.91, 10.72]} zoom={4} zoomControl={true} preferCanvas={true}>
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -511,7 +529,7 @@ function App() {
               <Polyline
                 positions={smoothPositions}
                 smoothFactor={0.35}
-                pathOptions={{ color: '#1a7c72', weight: 3, opacity: 1, lineCap: 'round', lineJoin: 'round' }}
+                pathOptions={{ color: isDark ? '#ff625f' : '#1a7c72', weight: isDark ? 4 : 3, opacity: 1, lineCap: 'round', lineJoin: 'round', className: isDark ? 'route-dark' : undefined }}
                 eventHandlers={{
                   click: (event) => {
                     let nearest = mapPoints[0]!
@@ -530,14 +548,14 @@ function App() {
                 }}
               />
             )}
-            <PointDots points={mapPoints} />
+            <PointDots points={mapPoints} isDark={isDark} />
             {mapPoints[0] && (
               <CircleMarker
                 center={[mapPoints[0].lat, mapPoints[0].lng]}
                 radius={7}
                 pathOptions={{ color: '#fff', weight: 2, fillColor: '#157d73', fillOpacity: 1 }}
               >
-                <Popup><strong>Startpunkt</strong><br />{formatPointDateTimeAtLocation(mapPoints[0].timestamp, mapPoints[0].lat, mapPoints[0].lng)}</Popup>
+                <Popup><strong>{ui.startPoint}</strong><br />{formatPointDateTimeAtLocation(mapPoints[0].timestamp, mapPoints[0].lat, mapPoints[0].lng, language)}</Popup>
               </CircleMarker>
             )}
             {mapPoints.length > 1 && (
@@ -546,7 +564,7 @@ function App() {
                 radius={7}
                 pathOptions={{ color: '#fff', weight: 2, fillColor: '#e27a49', fillOpacity: 1 }}
               >
-                <Popup><strong>Sluttpunkt</strong><br />{formatPointDateTimeAtLocation(mapPoints[mapPoints.length - 1]!.timestamp, mapPoints[mapPoints.length - 1]!.lat, mapPoints[mapPoints.length - 1]!.lng)}</Popup>
+                <Popup><strong>{ui.endPoint}</strong><br />{formatPointDateTimeAtLocation(mapPoints[mapPoints.length - 1]!.timestamp, mapPoints[mapPoints.length - 1]!.lat, mapPoints[mapPoints.length - 1]!.lng, language)}</Popup>
               </CircleMarker>
             )}
             {selectedPoint && selectedPoint.id !== mapPoints[0]?.id && selectedPoint.id !== mapPoints[mapPoints.length - 1]?.id && (
@@ -555,36 +573,36 @@ function App() {
                 radius={8}
                 pathOptions={{ color: '#fff', weight: 3, fillColor: '#d88748', fillOpacity: 1 }}
               >
-                <Popup><strong>{selectedPoint.label}</strong><br />{formatPointDateTimeAtLocation(selectedPoint.timestamp, selectedPoint.lat, selectedPoint.lng)}</Popup>
+                <Popup><strong>{displayPointLabel(selectedPoint.label, language)}</strong><br />{formatPointDateTimeAtLocation(selectedPoint.timestamp, selectedPoint.lat, selectedPoint.lng, language)}</Popup>
               </CircleMarker>
             )}
           </MapContainer>
 
           <div className="map-top-overlay">
             <div className="map-context">
-              <span className="context-kicker">{isDemo ? 'EKSEMPELVISNING' : 'TIDSLINJE'}</span>
-              <strong>{placeViewEnabled && placeScope ? placeScope.name : displayedDate}</strong>
+              <span className="context-kicker">{isDemo ? ui.exampleView : ui.timeline}</span>
+              <strong>{placeViewEnabled && placeScope ? scopedPlaceName : displayedDate}</strong>
             </div>
             <div className="map-actions">
-              {placeScope && <button className={'scope-toggle' + (placeViewEnabled ? ' active' : '')} type="button" onClick={() => setPlaceViewEnabled((enabled) => !enabled)}>{placeViewEnabled ? 'Vis kalender · ' + placeScope.name + ' ×' : 'Vis ' + placeScope.name + ' igjen'}</button>}
-              {isDemo && <span className="demo-badge"><span /> Eksempeldata</span>}
+              {placeScope && <button className={'scope-toggle' + (placeViewEnabled ? ' active' : '')} type="button" onClick={() => setPlaceViewEnabled((enabled) => !enabled)}>{placeViewEnabled ? ui.showCalendar + ' · ' + scopedPlaceName + ' ×' : ui.showPlaceAgain.replace('{place}', scopedPlaceName)}</button>}
+              {isDemo && <span className="demo-badge"><span /> {ui.sampleData}</span>}
             </div>
           </div>
 
           <div className="map-bottom-overlay">
-            <div className="map-legend"><span className="legend-line" /> Rute <span className="legend-dot" /> Posisjonspunkt</div>
+            <div className="map-legend"><span className="legend-line" /> {ui.route} <span className="legend-dot" /> {ui.locationPoint}</div>
             <div className="map-zoom-controls">
-              <button type="button" aria-label="Zoom inn" onClick={() => document.querySelector<HTMLElement>('.leaflet-control-zoom-in')?.click()}>+</button>
-              <button type="button" aria-label="Zoom ut" onClick={() => document.querySelector<HTMLElement>('.leaflet-control-zoom-out')?.click()}>−</button>
+              <button type="button" aria-label={ui.zoomIn} onClick={() => document.querySelector<HTMLElement>('.leaflet-control-zoom-in')?.click()}>+</button>
+              <button type="button" aria-label={ui.zoomOut} onClick={() => document.querySelector<HTMLElement>('.leaflet-control-zoom-out')?.click()}>−</button>
             </div>
           </div>
 
           {selectedPoint && (
             <div className="selected-card">
-              <button type="button" aria-label="Lukk punktdetaljer" onClick={() => setSelectedPointId(null)}>×</button>
-              <span className="selected-kicker">VALGT PUNKT</span>
-              <strong>{selectedPoint.label}</strong>
-              <span>{formatPointDateTimeAtLocation(selectedPoint.timestamp, selectedPoint.lat, selectedPoint.lng)} · {selectedPoint.lat.toFixed(5)}, {selectedPoint.lng.toFixed(5)}</span>
+              <button type="button" aria-label={ui.closePointDetails} onClick={() => setSelectedPointId(null)}>×</button>
+              <span className="selected-kicker">{ui.selectedPoint}</span>
+              <strong>{displayPointLabel(selectedPoint.label, language)}</strong>
+              <span>{formatPointDateTimeAtLocation(selectedPoint.timestamp, selectedPoint.lat, selectedPoint.lng, language)} · {selectedPoint.lat.toFixed(5)}, {selectedPoint.lng.toFixed(5)}</span>
             </div>
           )}
         </section>
