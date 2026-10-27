@@ -393,3 +393,25 @@
 .app-shell.dark .point-day-group { border-color: #2a3733; }
 .app-shell.dark .point-day-group > summary { color: #c1d0ca; }
 .app-shell.dark .point-day-group > summary::after { color: #9aaba4; }
+
+/* Compact language selector matching the app's segmented controls. */
+.language-switch { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid #e8eeeb; border-radius: 999px; background: #f0f4f2; }
+.language-switch button { min-width: 34px; height: 26px; padding: 0 8px; border: 0; border-radius: 999px; background: transparent; color: #83918d; font: inherit; font-size: 9px; font-weight: 750; letter-spacing: .3px; cursor: pointer; }
+.language-switch button.selected { color: #28534b; background: #fff; box-shadow: 0 1px 3px rgba(26, 59, 50, .12); }
+.language-switch button:focus-visible { outline: 2px solid #1a7c72; outline-offset: 1px; }
+.app-shell.dark .language-switch { background: #202a28; border-color: #34413d; }
+.app-shell.dark .language-switch button { color: #9caaa4; }
+.app-shell.dark .language-switch button.selected { color: #d9e8e2; background: #34423e; }
+@media (max-width: 680px) {
+  .topbar-right { gap: 6px; }
+  .language-switch { padding: 2px; }
+  .language-switch button { min-width: 30px; height: 25px; padding-inline: 6px; font-size: 8px; }
+  .theme-toggle { width: 31px; height: 31px; }
+}
+
+/* Keep the route and recorded dots distinct on the dark basemap. */
+.app-shell { --route-color: #1a7c72; --point-color: #d9534f; }
+.app-shell.dark { --route-color: #ff625f; --point-color: #4fd39a; }
+.app-shell.dark .route-dark { filter: drop-shadow(0 0 2px rgba(5, 13, 12, .95)) drop-shadow(0 0 1px rgba(255, 255, 255, .35)); }
+.legend-line { background: var(--route-color); }
+.legend-dot { background: var(--point-color); }
