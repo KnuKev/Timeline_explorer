@@ -32,7 +32,7 @@ The route connects recorded points in chronological order. It represents the rec
 
 ## Local place reference data
 
-Country outlines come from Natural Earth via `world-atlas` (ISC-licensed). City reference points and country codes come from [GeoNames](https://www.geonames.org/) and are included locally under CC BY 4.0. Place matching runs in a browser worker; Timeline coordinates are not sent to GeoNames or a geocoding service. City matches use the nearest GeoNames reference locality with a population of at least 2,500 within 30 km; Stabekk is included as a local reference point. The displayed day count means distinct calendar days containing one or more matching Timeline points, not time spent there.
+Country outlines come from Natural Earth via `world-atlas` (ISC-licensed). City reference points and country codes come from [GeoNames](https://www.geonames.org/) and are included locally under CC BY 4.0. Place matching runs in a browser worker; Timeline coordinates are not sent to GeoNames or a geocoding service. City matches use the nearest GeoNames reference locality with a population of at least 2,500 within 30 km. The displayed day count means distinct calendar days containing one or more matching Timeline points, not time spent there.
 
 To regenerate the reference files, place `cities1000.txt` from GeoNames in `.cache/geonames/`, then run:
 
