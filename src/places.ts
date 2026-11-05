@@ -1,39 +1,21 @@
-﻿import { localDateKey, type TimelinePoint } from './timeline'
+import type { TimelinePoint } from './timeline.ts'
+import { pointDateKeys } from './pointDates.ts'
+import { createCountryLookup } from './geography.ts'
 
 type CityReference = { name: string; lat: number; lng: number; countryCode: string }
 export type CountryFeature = { id?: string | number; properties?: { name?: string }; geometry: { type: string; coordinates: unknown } }
 type PlaceEntry = { key: string; name: string; countryName?: string; countryCode?: string; days: number; dates: string[]; pointCount: number; pointIds: string[] }
 type PlaceAnalysis = { countries: PlaceEntry[]; cities: PlaceEntry[] }
-
-type Ring = [number, number][]
-type Polygon = Ring[]
-type MultiPolygon = Polygon[]
-type PointInPolygonGeometry = { type: 'Polygon'; coordinates: Polygon } | { type: 'MultiPolygon'; coordinates: MultiPolygon }
+type PlaceIdentity = { key: string; name: string; countryCode?: string; countryName?: string }
+type PlaceMatch = { country: PlaceIdentity; city?: PlaceIdentity }
+type CityNode = { city: CityReference; position: [number, number, number]; index: number; axis: number; left?: CityNode; right?: CityNode }
+type CityCandidate = Pick<CityNode, 'city' | 'position' | 'index'>
 
 const displayNames = new Intl.DisplayNames(['no'], { type: 'region' })
-
-function inRing(lat: number, lng: number, ring: Ring): boolean {
-  let inside = false
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i]!
-    const [xj, yj] = ring[j]!
-    const crosses = (yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi
-    if (crosses) inside = !inside
-  }
-  return inside
-}
-
-function pointInGeometry(lat: number, lng: number, geometry: PointInPolygonGeometry): boolean {
-  const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
-  return polygons.some((polygon) => inRing(lat, lng, polygon[0]!) && !polygon.slice(1).some((hole) => inRing(lat, lng, hole)))
-}
-
-function findCountry(lat: number, lng: number, countryFeatures: CountryFeature[]): CountryFeature | undefined {
-  return countryFeatures.find((entry) => {
-    const geometry = entry.geometry as PointInPolygonGeometry
-    return pointInGeometry(lat, lng, geometry)
-  })
-}
+const EARTH_RADIUS_KM = 6371
+const CITY_RADIUS_KM = 30
+const cityIndexes = new WeakMap<CityReference[], Map<string, CityNode>>()
+const matchers = new WeakMap<CityReference[], WeakMap<CountryFeature[], WeakMap<Record<string, string>, (point: TimelinePoint) => PlaceMatch | undefined>>>()
 
 function kilometersBetween(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const rad = (degrees: number) => degrees * Math.PI / 180
@@ -43,68 +25,146 @@ function kilometersBetween(lat1: number, lng1: number, lat2: number, lng2: numbe
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-function gridCell(lat: number, lng: number): string {
-  return `${Math.floor(lat)}:${Math.floor(lng)}`
+function unitPosition(lat: number, lng: number): [number, number, number] {
+  const latitude = lat * Math.PI / 180
+  const longitude = lng * Math.PI / 180
+  const horizontal = Math.cos(latitude)
+  return [horizontal * Math.cos(longitude), horizontal * Math.sin(longitude), Math.sin(latitude)]
 }
 
-export function analysePlaces(points: TimelinePoint[], cities: CityReference[], countryCodes: Record<string, string>, countryFeatures: CountryFeature[]): PlaceAnalysis {
-  const countryAggregates = new Map<string, { ids: string[]; days: Set<string>; name: string; countryCode?: string }>()
-  const cityAggregates = new Map<string, { ids: string[]; days: Set<string>; name: string; countryCode: string; countryName?: string }>()
-  const cityGrid = new Map<string, CityReference[]>()
+function buildCityTree(cities: CityCandidate[], depth = 0): CityNode | undefined {
+  if (!cities.length) return undefined
+  const axis = depth % 3
+  cities.sort((a, b) => a.position[axis]! - b.position[axis]! || a.index - b.index)
+  const middle = Math.floor(cities.length / 2)
+  return { ...cities[middle]!, axis, left: buildCityTree(cities.slice(0, middle), depth + 1), right: buildCityTree(cities.slice(middle + 1), depth + 1) }
+}
 
-  for (const city of cities) {
-    const key = gridCell(city.lat, city.lng)
-    const cell = cityGrid.get(key) ?? []
-    cell.push(city)
-    cityGrid.set(key, cell)
+function getCityIndex(cities: CityReference[]): Map<string, CityNode> {
+  const cached = cityIndexes.get(cities)
+  if (cached) return cached
+  const grouped = new Map<string, CityCandidate[]>()
+  cities.forEach((city, index) => {
+    if (!Number.isFinite(city.lat) || !Number.isFinite(city.lng) || Math.abs(city.lat) > 90 || Math.abs(city.lng) > 180) return
+    const group = grouped.get(city.countryCode) ?? []
+    group.push({ city, index, position: unitPosition(city.lat, city.lng) })
+    grouped.set(city.countryCode, group)
+  })
+  const trees = new Map<string, CityNode>()
+  for (const [code, group] of grouped) {
+    const tree = buildCityTree(group)
+    if (tree) trees.set(code, tree)
   }
+  cityIndexes.set(cities, trees)
+  return trees
+}
 
-  for (const point of points) {
-    const country = findCountry(point.lat, point.lng, countryFeatures)
-    if (!country) continue
-    const numericCode = String(country.id ?? '')
-    const countryCode = countryCodes[numericCode]
-    const countryName = countryCode ? displayNames.of(countryCode) ?? country.properties?.name ?? 'Ukjent land' : country.properties?.name ?? 'Ukjent land'
-    const countryKey = countryCode ?? countryName
+// Preserve the former grid scan's deterministic choice for equidistant references.
+function earlierCandidate(a: CityNode, b: CityNode, queryLng: number): boolean {
+  const latitudeOrder = Math.floor(a.city.lat) - Math.floor(b.city.lat)
+  if (latitudeOrder) return latitudeOrder < 0
+  const relativeLongitude = (city: CityReference) => ((Math.floor(city.lng) - Math.floor(queryLng) + 540) % 360) - 180
+  const longitudeOrder = relativeLongitude(a.city) - relativeLongitude(b.city)
+  return longitudeOrder ? longitudeOrder < 0 : a.index < b.index
+}
 
-    const countryAggregate = countryAggregates.get(countryKey) ?? { ids: [], days: new Set<string>(), name: countryName, countryCode }
-    countryAggregate.ids.push(point.id)
-    countryAggregate.days.add(localDateKey(point.timestamp))
-    countryAggregates.set(countryKey, countryAggregate)
-
-    const longitudeCells = Math.min(180, Math.ceil(30 / (111 * Math.max(0.05, Math.cos(point.lat * Math.PI / 180)))) + 1)
-    const latitudeCell = Math.floor(point.lat)
-    const longitudeCell = Math.floor(point.lng)
-    let nearest: CityReference | undefined
-    let nearestDistance = 30
-    for (let latCell = latitudeCell - 1; latCell <= latitudeCell + 1; latCell += 1) {
-      for (let lonOffset = -longitudeCells; lonOffset <= longitudeCells; lonOffset += 1) {
-        const cellLng = ((longitudeCell + lonOffset + 540) % 360) - 180
-        for (const city of cityGrid.get(`${latCell}:${cellLng}`) ?? []) {
-          if (city.countryCode !== countryCode) continue
-          const distance = kilometersBetween(point.lat, point.lng, city.lat, city.lng)
-          if (distance < nearestDistance) {
-            nearest = city
-            nearestDistance = distance
-          }
-        }
+function nearestCity(tree: CityNode | undefined, lat: number, lng: number): CityReference | undefined {
+  const position = unitPosition(lat, lng)
+  let best: CityNode | undefined
+  let bestKm = CITY_RADIUS_KM
+  let maximumChordSquared = (2 * Math.sin(bestKm / (2 * EARTH_RADIUS_KM))) ** 2
+  const visit = (node: CityNode | undefined) => {
+    if (!node) return
+    const offset = position[node.axis]! - node.position[node.axis]!
+    const near = offset < 0 ? node.left : node.right
+    const far = offset < 0 ? node.right : node.left
+    visit(near)
+    const squared = position.reduce((sum, coordinate, axis) => sum + (coordinate - node.position[axis]!) ** 2, 0)
+    if (squared <= maximumChordSquared + 1e-14) {
+      const distance = kilometersBetween(lat, lng, node.city.lat, node.city.lng)
+      if (distance < bestKm || (best && distance === bestKm && earlierCandidate(node, best, lng))) {
+        best = node
+        bestKm = distance
+        maximumChordSquared = (2 * Math.sin(bestKm / (2 * EARTH_RADIUS_KM))) ** 2
       }
     }
-    if (!nearest) continue
-    const cityKey = `${countryCode ?? countryKey}:${nearest.name}:${nearest.lat.toFixed(3)}:${nearest.lng.toFixed(3)}`
-    const cityAggregate = cityAggregates.get(cityKey) ?? { ids: [], days: new Set<string>(), name: nearest.name, countryCode: nearest.countryCode, countryName }
-    cityAggregate.ids.push(point.id)
-    cityAggregate.days.add(localDateKey(point.timestamp))
-    cityAggregates.set(cityKey, cityAggregate)
+    if (offset * offset <= maximumChordSquared + 1e-14) visit(far)
   }
+  visit(tree)
+  return best?.city
+}
 
-  const countries = Array.from(countryAggregates, ([key, value]) => ({ key, name: value.name, countryCode: value.countryCode, days: value.days.size, dates: Array.from(value.days).sort().reverse(), pointCount: value.ids.length, pointIds: value.ids }))
-    .sort((a, b) => b.days - a.days || b.pointCount - a.pointCount || a.name.localeCompare(b.name, 'no'))
-  const rankedCities = Array.from(cityAggregates, ([key, value]) => ({ key, name: value.name, countryCode: value.countryCode, countryName: value.countryName, days: value.days.size, dates: Array.from(value.days).sort().reverse(), pointCount: value.ids.length, pointIds: value.ids }))
-    .sort((a, b) => b.days - a.days || b.pointCount - a.pointCount || a.name.localeCompare(b.name, 'no'))
+function getMatcher(cities: CityReference[], countryCodes: Record<string, string>, countryFeatures: CountryFeature[]) {
+  let byFeatures = matchers.get(cities)
+  if (!byFeatures) { byFeatures = new WeakMap(); matchers.set(cities, byFeatures) }
+  let byCodes = byFeatures.get(countryFeatures)
+  if (!byCodes) { byCodes = new WeakMap(); byFeatures.set(countryFeatures, byCodes) }
+  const cached = byCodes.get(countryCodes)
+  if (cached) return cached
+  const findCountry = createCountryLookup(countryFeatures)
+  const cityTrees = getCityIndex(cities)
+  const countryMatches = new Map<CountryFeature, PlaceMatch>()
+  const pointMatches = new WeakMap<TimelinePoint, { lat: number; lng: number; match: PlaceMatch | undefined }>()
+  const cityMatches = new WeakMap<CityReference, PlaceMatch>()
+  const match = (point: TimelinePoint): PlaceMatch | undefined => {
+    const previous = pointMatches.get(point)
+    if (previous && previous.lat === point.lat && previous.lng === point.lng) return previous.match
+    const country = findCountry(point.lat, point.lng)
+    let result: PlaceMatch | undefined
+    if (country) {
+      let countryMatch = countryMatches.get(country)
+      if (!countryMatch) {
+        const numericCode = String(country.id ?? '')
+        const countryCode = countryCodes[numericCode] ?? countryCodes[numericCode.padStart(3, '0')]
+        const name = countryCode ? displayNames.of(countryCode) ?? country.properties?.name ?? 'Ukjent land' : country.properties?.name ?? 'Ukjent land'
+        countryMatch = { country: { key: countryCode ?? name, name, countryCode } }
+        countryMatches.set(country, countryMatch)
+      }
+      const identity = countryMatch.country
+      result = countryMatch
+      const nearest = identity.countryCode ? nearestCity(cityTrees.get(identity.countryCode), point.lat, point.lng) : undefined
+      if (nearest) {
+        let cityMatch = cityMatches.get(nearest)
+        if (!cityMatch) {
+          cityMatch = { country: identity, city: { key: `${identity.countryCode ?? identity.key}:${nearest.name}:${nearest.lat.toFixed(3)}:${nearest.lng.toFixed(3)}`, name: nearest.name, countryCode: nearest.countryCode, countryName: identity.name } }
+          cityMatches.set(nearest, cityMatch)
+        }
+        result = cityMatch
+      }
+    }
+    pointMatches.set(point, { lat: point.lat, lng: point.lng, match: result })
+    return result
+  }
+  byCodes.set(countryCodes, match)
+  return match
+}
 
-  return { countries, cities: rankedCities }
+/** Reference arrays are immutable. Reuse them to retain the spatial indexes;
+ * point caches are weak so replacing an imported file releases its observations. */
+export function analysePlaces(points: TimelinePoint[], cities: CityReference[], countryCodes: Record<string, string>, countryFeatures: CountryFeature[], datesByPoint?: ReadonlyMap<TimelinePoint, readonly string[]>): PlaceAnalysis {
+  const match = getMatcher(cities, countryCodes, countryFeatures)
+  type Aggregate = { identity: PlaceIdentity; ids: string[]; days: Set<string> }
+  const countryAggregates = new Map<string, Aggregate>()
+  const cityAggregates = new Map<string, Aggregate>()
+  const append = (aggregates: Map<string, Aggregate>, identity: PlaceIdentity, point: TimelinePoint, dates: readonly string[]) => {
+    const aggregate = aggregates.get(identity.key) ?? { identity, ids: [], days: new Set<string>() }
+    aggregate.ids.push(point.id)
+    for (const day of dates) aggregate.days.add(day)
+    aggregates.set(identity.key, aggregate)
+  }
+  for (const point of points) {
+    const places = match(point)
+    if (!places) continue
+    const dates = datesByPoint?.get(point) ?? pointDateKeys(point)
+    append(countryAggregates, places.country, point, dates)
+    if (places.city) append(cityAggregates, places.city, point, dates)
+  }
+  const entries = (aggregates: Map<string, Aggregate>): PlaceEntry[] => Array.from(aggregates.values(), ({ identity, ids, days }) => ({
+    key: identity.key, name: identity.name, countryCode: identity.countryCode,
+    ...(identity.countryName === undefined ? {} : { countryName: identity.countryName }),
+    days: days.size, dates: Array.from(days).sort().reverse(), pointCount: ids.length, pointIds: ids,
+  })).sort((a, b) => b.days - a.days || b.pointCount - a.pointCount || a.name.localeCompare(b.name, 'no'))
+  return { countries: entries(countryAggregates), cities: entries(cityAggregates) }
 }
 
 export type { CityReference, PlaceAnalysis, PlaceEntry }
-

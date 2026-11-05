@@ -1,0 +1,93 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import Statistics from '../src/Statistics.tsx'
+import type { StatisticsAnalysis, StatisticsPeriod } from '../src/statistics.ts'
+
+function fixture(): StatisticsAnalysis {
+  const period: StatisticsPeriod = {
+    distanceKm: 325, recordedDays: 3, countryCount: 2, cityCount: 3,
+    monthly: Array.from({ length: 12 }, (_, index) => ({ month: index + 1, distanceKm: index === 1 ? 325 : 0, recordedDays: index === 1 ? 3 : 0 })),
+    daily: [{ date: '2024-02-27', distanceKm: 0 }, { date: '2024-02-28', distanceKm: 25 }, { date: '2024-02-29', distanceKm: 300 }],
+    hourlyMinutes: Array.from({ length: 24 }, (_, hour) => hour === 17 ? 120 : hour === 8 ? 30 : 0),
+    countries: [{ key: 'NO', name: 'Norge', countryCode: 'NO', days: 3 }],
+    cities: [{ key: 'oslo', name: 'Oslo', countryCode: 'NO', days: 2 }],
+    newPlaces: Array.from({ length: 30 }, (_, index) => ({ key: `place-${index}`, kind: 'country' as const, name: `Place ${index}`, date: '2024-02-29' })),
+    patterns: [{ key: 'route', from: { key: 'NO:Oslo', name: 'Oslo', countryCode: 'NO' }, to: { key: 'NO:Bergen', name: 'Bergen', countryCode: 'NO' }, count: 4, lastDate: '2024-02-29' }],
+  }
+  return { years: [2024], all: period, byYear: { '2024': period } }
+}
+
+const render = (data = fixture(), language: 'nb' | 'en' = 'en') => renderToStaticMarkup(createElement(Statistics, {
+  data, loading: false, language, onRetry() {}, onOpenRange() {},
+}))
+
+test('statistics calendar includes leap day and distinguishes missing records from recorded zero distance', () => {
+  const html = render()
+  assert.equal((html.match(/data-date="2024-/g) ?? []).length, 366)
+  assert.match(html, /data-date="2024-02-27" class="statistics-calendar-day level-0"[^>]*aria-label="[^"]*0 m/)
+  assert.match(html, /data-date="2024-02-29" class="statistics-calendar-day level-5"/)
+  assert.match(html, /data-date="2024-03-01" class="statistics-calendar-day level-unknown"[^>]*disabled=""/)
+  assert.doesNotMatch(html, /NaN|Infinity/)
+})
+
+test('statistics exposes the real hourly peak and bounded lists in both languages', () => {
+  const english = render()
+  assert.match(english, /MOST ACTIVE: 17–18/)
+  assert.match(english, /Oslo <span class="statistics-bidirectional"/)
+  assert.match(english, /Norway · /)
+  assert.equal((english.match(/class="statistics-new-place"/g) ?? []).length, 8)
+  assert.match(english, /Choose a year to open/)
+  const norwegian = render(fixture(), 'nb')
+  assert.match(norwegian, /MEST AKTIV: 17–18/)
+  assert.match(norwegian, /Strekningene du gjentar/)
+  assert.match(norwegian, /Oslo <span class="statistics-bidirectional"/)
+  assert.match(norwegian, /Norge · /)
+})
+
+test('statistics keeps monthly distance while removing the days toggle and duplicate place rankings', () => {
+  const html = render()
+  const monthly = html.match(/<article class="statistics-card statistics-monthly">([\s\S]*?)<\/article>/)?.[1]
+  assert.ok(monthly)
+  assert.match(monthly, /325 km/)
+  assert.match(monthly, /statistics-chart-unit[^>]*>km/)
+  assert.doesNotMatch(monthly, /role="group"|aria-pressed|>Days</)
+  assert.doesNotMatch(html, /statistics-place-row|statistics-places"|Most visited places/)
+  assert.match(html, /statistics-new-places/)
+})
+
+test('a leap year beginning on Sunday keeps its final day in the 54th calendar column', () => {
+  const data = fixture()
+  data.years = [2012]
+  data.all.daily = [{ date: '2012-01-01', distanceKm: 1 }, { date: '2012-12-31', distanceKm: 2 }]
+  data.byYear = { '2012': data.all }
+  const html = render(data)
+  assert.match(html, /--calendar-weeks:54/)
+  assert.equal((html.match(/data-date="2012-/g) ?? []).length, 366)
+  assert.match(html, /data-date="2012-12-31"[^>]*grid-column:55;grid-row:2/)
+})
+
+test('same-name cities remain distinguishable by country without stop coordinates or home labels', () => {
+  const data = fixture()
+  data.all.patterns = [
+    { key: 'france-route', from: { key: 'FR:Paris', name: 'Paris', countryCode: 'FR' }, to: { key: 'DE:Berlin', name: 'Berlin', countryCode: 'DE' }, count: 4, lastDate: '2024-02-29' },
+    { key: 'texas-route', from: { key: 'US:Paris', name: 'Paris', countryCode: 'US' }, to: { key: 'DE:Berlin', name: 'Berlin', countryCode: 'DE' }, count: 2, lastDate: '2024-02-28' },
+  ]
+  const html = render(data)
+  assert.equal((html.match(/class="statistics-pattern-row"/g) ?? []).length, 2)
+  assert.match(html, /France ↔ Germany/)
+  assert.match(html, /United States ↔ Germany/)
+  assert.doesNotMatch(html, /statistics-pattern-coordinates|>Home</)
+})
+
+test('statistics loading and errors do not present stale charts as current results', () => {
+  const props = { data: fixture(), language: 'en' as const, onRetry() {}, onOpenRange() {} }
+  const loading = renderToStaticMarkup(createElement(Statistics, { ...props, loading: true }))
+  assert.match(loading, /role="status"/)
+  assert.doesNotMatch(loading, /statistics-calendar-day/)
+  const error = renderToStaticMarkup(createElement(Statistics, { ...props, loading: false, error: 'Please retry.' }))
+  assert.match(error, /role="alert"/)
+  assert.match(error, /Try again/)
+  assert.doesNotMatch(error, /statistics-calendar-day/)
+})

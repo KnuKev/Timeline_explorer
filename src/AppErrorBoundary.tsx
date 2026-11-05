@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { getStoredLanguage, translations } from './i18n'
 
 type Props = { children: ReactNode }
 type State = { error: Error | null }
@@ -16,14 +17,15 @@ export default class AppErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.error) {
+      const t = translations[getStoredLanguage()]
       return (
         <main className="fatal-error">
           <section>
             <span aria-hidden="true">!</span>
-            <h1>Visningen krasjet</h1>
-            <p>Appen klarte ikke å vise dette datasettet. Last siden på nytt og prøv igjen.</p>
+            <h1>{t.crashTitle}</h1>
+            <p>{t.crashBody}</p>
             <pre>{this.state.error.message}</pre>
-            <button type="button" onClick={() => window.location.reload()}>Last inn siden på nytt</button>
+            <button type="button" onClick={() => window.location.reload()}>{t.reload}</button>
           </section>
         </main>
       )

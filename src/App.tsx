@@ -1,26 +1,25 @@
-import { useEffect, useMemo, useState } from 'react'
-import { CircleMarker, MapContainer, Polyline, Popup, TileLayer, useMap } from 'react-leaflet'
-import L from 'leaflet'
-import tzLookup from 'tz-lookup'
-import {
-  distanceKm,
-  formatLongDate,
-  localDateKey,
-  parseTimeline,
-  type TimelinePoint,
-} from './timeline'
-import { type PlaceAnalysis, type CityReference, type PlaceEntry } from './places'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import type { TimelinePoint } from './timeline'
+import type { PlaceEntry } from './places'
+import type { TimelineTrip } from './trips'
+import { getStoredHomeRadius, homeRadiusStorageKey, normalizeHomeRadius } from './tripSettings'
+import { getStoredLanguage, languageStorageKey, locales, pointLabel, translations, type Language } from './i18n'
+import { buildRouteSegments } from './routes'
+import { prepareTimeline, selectTimelineRange, groupTimelineSelection, adjacentRecordedDay, type TimelineDataset } from './timelineIndex'
+import { useTimelineImport } from './useTimelineImport'
+import { usePlaces } from './usePlaces'
+import TimelineMap from './TimelineMap'
+import { getMapColors } from './mapAppearance'
+import PointList from './PointList'
+import Icon from './Icon'
+import { formatCalendarDate, formatPlaceDate, formatPointInterval, formatDistance } from './formatting'
 import './App.css'
 
 type DateMode = 'day' | 'period'
-type ActiveTab = 'map' | 'places'
-type PlaceScope = { kind: 'country' | 'city'; name: string; key: string; pointIds: string[]; countryName?: string }
-
-const MAX_VISIBLE_MARKERS = 8_000
-const MAX_MARKERS_PER_GRID_CELL = 250
-const GRID_CELL_METERS = 5_000
-const MAX_ROUTE_INPUT_POINTS = 12_000
-const MAX_ROUTE_POINTS_PER_GRID_CELL = 250
+type ActiveTab = 'map' | 'trips' | 'places' | 'statistics'
+type PlaceScope = { kind: 'country' | 'city'; name: string; key: string; countryName?: string; countryCode?: string }
+const Statistics = lazy(() => import('./Statistics'))
+const Trips = lazy(() => import('./Trips'))
 
 const demoPoints: TimelinePoint[] = [
   { id: 'demo-1', lat: 59.907716, lng: 10.590889, timestamp: '2026-10-13T17:04:00.000Z', kind: 'path', label: 'Rutepunkt' },
@@ -33,433 +32,315 @@ const demoPoints: TimelinePoint[] = [
   { id: 'demo-8', lat: 59.920600, lng: 10.762900, timestamp: '2026-10-13T19:00:00.000Z', kind: 'path', label: 'Rutepunkt' },
 ]
 
-function MapViewport({ points }: { points: TimelinePoint[] }) {
-  const map = useMap()
-
-  useEffect(() => {
-    if (points.length === 0) return
-    let minLat = 90
-    let maxLat = -90
-    let minLng = 180
-    let maxLng = -180
-    for (const point of points) {
-      minLat = Math.min(minLat, point.lat)
-      maxLat = Math.max(maxLat, point.lat)
-      minLng = Math.min(minLng, point.lng)
-      maxLng = Math.max(maxLng, point.lng)
-    }
-    map.fitBounds([[minLat, minLng], [maxLat, maxLng]], {
-      padding: [76, 76],
-      maxZoom: points.length === 1 ? 14 : 15,
-      animate: points.length < 5000,
-    })
-  }, [map, points])
-
-  return null
-}
-
-function formatPlaceDate(dateKey: string): string {
-  return new Intl.DateTimeFormat('no-NO', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(dateKey + 'T12:00:00'))
-}
-
-function formatPointDateTime(timestamp: string): string {
-  return new Intl.DateTimeFormat('no-NO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(timestamp))
-}
-
-function formatPointDateTimeAtLocation(timestamp: string, lat: number, lng: number): string {
-  let timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
-  try {
-    timeZone = tzLookup(lat, lng)
-  } catch {
-    // Keep the browser's local zone if the coordinate is outside the lookup data.
-  }
-  return new Intl.DateTimeFormat('no-NO', {
-    timeZone,
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(timestamp))
-}
-
-function formatDistance(kilometers: number): string {
-  if (kilometers < 1) return Math.round(kilometers * 1000) + ' m'
-  return kilometers.toLocaleString('no-NO', { maximumFractionDigits: 1 }) + ' km'
-}
-
-function samplePoints(points: TimelinePoint[], maximum: number): TimelinePoint[] {
-  if (points.length <= maximum) return points
-  if (maximum <= 1) return points.length > 0 ? [points[0]!] : []
-  const lastIndex = points.length - 1
-  const stride = lastIndex / (maximum - 1)
-  return Array.from({ length: maximum }, (_, index) => points[Math.round(index * stride)]!).filter(Boolean)
-}
-
-function selectSpatiallyDistributedPoints(points: TimelinePoint[], maximum: number, perCellMaximum: number): TimelinePoint[] {
-  const cells = new Map<string, TimelinePoint[]>()
-  for (const point of points) {
-    // Approximate a 5 km equirectangular grid, correcting longitude for latitude.
-    const x = 6_378_137 * point.lng * Math.PI / 180 * Math.cos(point.lat * Math.PI / 180)
-    const y = 6_378_137 * point.lat * Math.PI / 180
-    const cellKey = `${Math.floor(x / GRID_CELL_METERS)}:${Math.floor(y / GRID_CELL_METERS)}`
-    const cell = cells.get(cellKey) ?? []
-    cell.push(point)
-    cells.set(cellKey, cell)
-  }
-
-  // Limit dense areas, then take points evenly across each cell's timeline.
-  const sampledCells = Array.from(cells.values(), (cell) => samplePoints(cell, perCellMaximum))
-  const selected = new Set<TimelinePoint>()
-  // Round-robin across cells so dense cities do not crowd out rural route sections.
-  for (let offset = 0; selected.size < maximum; offset += 1) {
-    let foundAtOffset = false
-    for (const cell of sampledCells) {
-      const point = cell[offset]
-      if (!point) continue
-      selected.add(point)
-      foundAtOffset = true
-      if (selected.size >= maximum) break
-    }
-    if (!foundAtOffset) break
-  }
-
-  return points.filter((point) => selected.has(point))
-}
-
-function selectVisibleMarkers(points: TimelinePoint[]): TimelinePoint[] {
-  return selectSpatiallyDistributedPoints(points, MAX_VISIBLE_MARKERS, MAX_MARKERS_PER_GRID_CELL)
-}
-
-function smoothRoute(points: TimelinePoint[]): [number, number][] {
-  if (points.length < 3) return points.map((point) => [point.lat, point.lng])
-  const result: [number, number][] = [[points[0]!.lat, points[0]!.lng]]
-  const steps = 3
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const p0 = points[Math.max(0, index - 1)]!
-    const p1 = points[index]!
-    const p2 = points[index + 1]!
-    const p3 = points[Math.min(points.length - 1, index + 2)]!
-    for (let step = 1; step <= steps; step += 1) {
-      const t = step / steps
-      const t2 = t * t
-      const t3 = t2 * t
-      const curve = (x: number, y: number, z: number, w: number) => 0.5 * ((2 * y) + (-x + z) * t + (2 * x - 5 * y + 4 * z - w) * t2 + (-x + 3 * y - 3 * z + w) * t3)
-      const boundedCurve = (x: number, y: number, z: number, w: number) => Math.max(Math.min(y, z), Math.min(Math.max(y, z), curve(x, y, z, w)))
-      result.push([boundedCurve(p0.lat, p1.lat, p2.lat, p3.lat), boundedCurve(p0.lng, p1.lng, p2.lng, p3.lng)])
-    }
-  }
-  return result
-}
-function PointDots({ points }: { points: TimelinePoint[] }) {
-  const map = useMap()
-
-  useEffect(() => {
-    if (points.length === 0) return
-    const canvas = L.DomUtil.create('canvas', 'timeline-point-canvas')
-    const context = canvas.getContext('2d')
-    if (!context) return
-    map.getContainer().appendChild(canvas)
-
-    const drawPoints = () => {
-      const size = map.getSize()
-      const pixelRatio = window.devicePixelRatio || 1
-      canvas.width = Math.round(size.x * pixelRatio)
-      canvas.height = Math.round(size.y * pixelRatio)
-      canvas.style.width = size.x + 'px'
-      canvas.style.height = size.y + 'px'
-      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
-      context.clearRect(0, 0, size.x, size.y)
-      const bounds = map.getBounds().pad(0.04)
-      const visiblePoints = points.filter((point) => bounds.contains([point.lat, point.lng]))
-      const markerPoints = selectVisibleMarkers(visiblePoints)
-
-      for (const point of markerPoints) {
-        const pixel = map.latLngToContainerPoint([point.lat, point.lng])
-        context.beginPath()
-        context.arc(pixel.x, pixel.y, 2.2, 0, Math.PI * 2)
-        context.fillStyle = '#d9534f'
-        context.fill()
-        context.lineWidth = 1
-        context.strokeStyle = '#fff'
-        context.stroke()
-      }
-      canvas.style.visibility = 'visible'
-    }
-
-    const hidePointsDuringMovement = () => { canvas.style.visibility = 'hidden' }
-    let pendingFrame = 0
-    const drawAfterMovement = () => {
-      if (pendingFrame) cancelAnimationFrame(pendingFrame)
-      pendingFrame = requestAnimationFrame(() => { pendingFrame = 0; drawPoints() })
-    }
-
-    map.on('movestart zoomstart', hidePointsDuringMovement)
-    map.on('moveend zoomend resize', drawAfterMovement)
-    drawPoints()
-    return () => {
-      map.off('movestart zoomstart', hidePointsDuringMovement)
-      map.off('moveend zoomend resize', drawAfterMovement)
-      if (pendingFrame) cancelAnimationFrame(pendingFrame)
-      canvas.remove()
-    }
-  }, [map, points])
-
-  return null
-}
 function App() {
-  const [points, setPoints] = useState<TimelinePoint[]>(demoPoints)
+  const [language, setLanguage] = useState<Language>(getStoredLanguage)
+  const t = translations[language]
+  const locale = locales[language]
+  const regionNames = useMemo(() => new Intl.DisplayNames([locale], { type: 'region' }), [locale])
+  const countryName = (code?: string, fallback?: string) => code ? regionNames.of(code) ?? fallback ?? t.unknownCountry : fallback ?? t.unknownCountry
+
+  useEffect(() => {
+    document.documentElement.lang = language
+    try { localStorage.setItem(languageStorageKey, language) } catch { /* Language switching also works when storage is unavailable. */ }
+  }, [language])
+  const [dataset, setDataset] = useState(() => prepareTimeline(demoPoints))
+  const importedPoints = dataset.points
+  const [showSuspectPoints, setShowSuspectPoints] = useState(false)
+  const [qualityDismissed, setQualityDismissed] = useState(false)
+  const pointQuality = dataset
+  const pointsById = useMemo(() => new Map(importedPoints.map(point => [point.id, point])), [importedPoints])
+  const suspectPointIds = useMemo(() => new Set(dataset.excluded.map(entry => entry.point.id)), [dataset])
   const [activeTab, setActiveTab] = useState<ActiveTab>('map')
   const [placeMode, setPlaceMode] = useState<'countries' | 'cities'>('countries')
-  const [cityReferences, setCityReferences] = useState<CityReference[]>([])
-  const [countryCodes, setCountryCodes] = useState<Record<string, string>>({})
-  const [placeAnalysis, setPlaceAnalysis] = useState<PlaceAnalysis | null>(null)
-  const [placesLoading, setPlacesLoading] = useState(true)
-  const [placesError, setPlacesError] = useState('')
+  const [placesRequested, setPlacesRequested] = useState(false)
+  const [statisticsRequested, setStatisticsRequested] = useState(false)
+  const [tripsRequested, setTripsRequested] = useState(false)
+  const [tripScope, setTripScope] = useState<TimelineTrip | null>(null)
+  const [homeRadiusKm, setHomeRadiusKm] = useState(getStoredHomeRadius)
   const [placeScope, setPlaceScope] = useState<PlaceScope | null>(null)
   const [placeViewEnabled, setPlaceViewEnabled] = useState(false)
   const [isDemo, setIsDemo] = useState(true)
-  const [isDark, setIsDark] = useState(false)
+  const [isDark, setIsDark] = useState(() => { try { return localStorage.getItem('timeline-explorer-dark') === 'true' } catch { return false } })
+  const mapColors = getMapColors(isDark)
   const [isPointListExpanded, setIsPointListExpanded] = useState(false)
   const [dateMode, setDateMode] = useState<DateMode>('day')
   const [selectedDate, setSelectedDate] = useState('2026-10-13')
   const [fromDate, setFromDate] = useState('2026-10-13')
   const [toDate, setToDate] = useState('2026-10-13')
   const [fileName, setFileName] = useState('')
-  const [error, setError] = useState('')
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null)
+  const { data: placeAnalysis, statistics, trips, loading: placesLoading, statisticsLoading, tripsLoading, error: placesError, retry: retryPlaces } = usePlaces(dataset, showSuspectPoints, placesRequested, statisticsRequested, tripsRequested, homeRadiusKm)
+  useEffect(() => { try { localStorage.setItem('timeline-explorer-dark', String(isDark)) } catch { /* Storage is optional. */ } }, [isDark])
+  useEffect(() => { try { localStorage.setItem(homeRadiusStorageKey, String(homeRadiusKm)) } catch { /* The radius also works without storage. */ } }, [homeRadiusKm])
 
-  useEffect(() => {
-    let cancelled = false
-    Promise.all([
-      fetch('/geonames-cities.json').then((r) => { if (!r.ok) throw new Error(); return r.json() as Promise<CityReference[]> }),
-      fetch('/country-codes.json').then((r) => { if (!r.ok) throw new Error(); return r.json() as Promise<Record<string, string>> }),
-    ]).then(([cities, codes]) => {
-      if (!cancelled) { setCityReferences(cities); setCountryCodes(codes); setPlacesLoading(false) }
-    }).catch(() => {
-      if (!cancelled) { setPlacesError('Stedsdataene kunne ikke lastes. Prøv å laste siden på nytt.'); setPlacesLoading(false) }
-    })
-    return () => { cancelled = true }
-  }, [])
 
-  useEffect(() => {
-    if (cityReferences.length === 0) return
-    setPlacesLoading(true)
-    const worker = new Worker(new URL('./places.worker.ts', import.meta.url), { type: 'module' })
-    worker.onmessage = (event: MessageEvent<PlaceAnalysis>) => { setPlaceAnalysis(event.data); setPlacesLoading(false) }
-    worker.onerror = () => { setPlacesError('Punktene kunne ikke sorteres geografisk. Prøv å laste Timeline-filen på nytt.'); setPlacesLoading(false); worker.terminate() }
-    worker.postMessage({ points, cities: cityReferences, countryCodes })
-    return () => worker.terminate()
-  }, [cityReferences, countryCodes, points])
-
-  const availableDays = useMemo(
-    () => Array.from(new Set(points.map((point) => localDateKey(point.timestamp)))).sort(),
-    [points],
-  )
-
-  const visiblePoints = useMemo(() => {
-    return points.filter((point) => {
-      const day = localDateKey(point.timestamp)
-      return dateMode === 'day' ? day === selectedDate : day >= fromDate && day <= toDate
-    })
-  }, [dateMode, fromDate, points, selectedDate, toDate])
+  const availableDays = useMemo(() => dataset.days.filter(day => showSuspectPoints || day.cleanCount > 0).map(day => day.day), [dataset, showSuspectPoints])
+  const visiblePoints = useMemo(() => selectTimelineRange(dataset, dateMode === 'day' ? selectedDate : fromDate, dateMode === 'day' ? selectedDate : toDate, showSuspectPoints), [dataset, dateMode, selectedDate, fromDate, toDate, showSuspectPoints])
 
   const mapPoints = useMemo(() => {
+    if (tripScope) return tripScope.pointIds.map(id => pointsById.get(id)).filter((point): point is TimelinePoint => Boolean(point))
     if (!placeScope || !placeViewEnabled) return visiblePoints
-    const ids = new Set(placeScope.pointIds)
-    return points.filter((point) => ids.has(point.id))
-  }, [placeScope, placeViewEnabled, points, visiblePoints])
+    const scopedPlaces = placeScope.kind === 'country' ? placeAnalysis?.countries : placeAnalysis?.cities
+    const ids = scopedPlaces?.find(place => place.key === placeScope.key)?.pointIds ?? []
+    return ids.map(id => pointsById.get(id)).filter((point): point is TimelinePoint => Boolean(point))
+  }, [tripScope, placeAnalysis, placeScope, placeViewEnabled, pointsById, visiblePoints])
   const places = placeMode === 'countries' ? placeAnalysis?.countries ?? [] : placeAnalysis?.cities ?? []
-  const mainPlaces = places.filter((place) => place.pointCount >= 10)
-  const fewerPlaces = places.filter((place) => place.pointCount < 10)
-  const renderPlaceCard = (place: PlaceEntry, index: number) => <button key={place.key} type="button" className="place-card" onClick={() => { setPlaceScope({ kind: placeMode === 'countries' ? 'country' : 'city', key: place.key, name: place.name, countryName: place.countryName, pointIds: place.pointIds }); setPlaceViewEnabled(true); setActiveTab('map'); setSelectedPointId(null) }}><span className="place-rank">{String(index + 1).padStart(2, '0')}</span><span className="place-card-copy"><strong>{place.name}</strong><small>{placeMode === 'cities' ? place.countryName : 'Land'}</small></span><span className="place-days"><strong>{place.days.toLocaleString('no-NO')}</strong><small>dager</small></span><span className="place-dates"><small>{place.dates.length > 1 ? 'Siste datoer' : 'Dato'}</small><span>{place.dates.slice(0, 3).map(formatPlaceDate).join(' · ') + (place.dates.length > 3 ? ' · +' + (place.dates.length - 3) : '')}</span></span><span className="place-card-footer">{place.pointCount.toLocaleString('no-NO')} posisjonspunkter <span>↗</span></span></button>
-  const selectedPoint = mapPoints.find((point) => point.id === selectedPointId) ?? null
-  const routePoints = useMemo(
-    () => selectSpatiallyDistributedPoints(mapPoints, MAX_ROUTE_INPUT_POINTS, MAX_ROUTE_POINTS_PER_GRID_CELL),
-    [mapPoints],
-  )
-  const smoothPositions = useMemo(() => smoothRoute(routePoints), [routePoints])
-  const mapDistance = useMemo(() => distanceKm(mapPoints), [mapPoints])
-  const pointGroups = useMemo(() => {
-    const groups = new Map<string, TimelinePoint[]>()
-    for (const point of mapPoints) {
-      const day = localDateKey(point.timestamp)
-      const dayPoints = groups.get(day) ?? []
-      dayPoints.push(point)
-      groups.set(day, dayPoints)
-    }
-    return Array.from(groups, ([day, dayPoints]) => ({ day, points: dayPoints }))
-  }, [mapPoints])
-  const displayedDate = dateMode === 'day'
-    ? formatLongDate(selectedDate)
-    : fromDate === toDate
-      ? formatLongDate(fromDate)
-      : formatLongDate(fromDate) + ' – ' + formatLongDate(toDate)
-
-  const handleFile = async (file?: File) => {
-    if (!file) return
-    setError('')
-    try {
-      const parsed = parseTimeline(JSON.parse(await file.text()))
-      if (parsed.length === 0) {
-        setError('Fant ingen gjenkjennelige koordinater. Kontroller at dette er en Google Timeline JSON-fil.')
-        return
-      }
-      setPoints(parsed)
-      setIsDemo(false)
-      setFileName(file.name)
-      const firstDay = localDateKey(parsed[0]!.timestamp)
-      const lastDay = localDateKey(parsed[parsed.length - 1]!.timestamp)
-      setSelectedDate(firstDay)
-      const lastDate = new Date(lastDay + 'T12:00:00')
-      lastDate.setDate(lastDate.getDate() - 6)
-      const weekStart = [lastDate.getFullYear(), String(lastDate.getMonth() + 1).padStart(2, '0'), String(lastDate.getDate()).padStart(2, '0')].join('-')
-      setFromDate(weekStart < firstDay ? firstDay : weekStart)
-      setToDate(lastDay)
-      setDateMode('day')
-      setSelectedPointId(null)
-      setPlaceScope(null)
-      setPlaceViewEnabled(false)
+  // A short drive can leave only a few points in a country; keep that country visible.
+  const mainPlaces = placeMode === 'countries' ? places : places.filter((place) => place.pointCount >= 10)
+  const fewerPlaces = placeMode === 'countries' ? [] : places.filter((place) => place.pointCount < 10)
+  const placeName = (place: PlaceEntry) => placeMode === 'countries' ? countryName(place.countryCode, place.name) : place.name
+  const scopeName = placeScope?.kind === 'country' ? countryName(placeScope.countryCode, placeScope.name) : placeScope?.name ?? ''
+  const tripName = tripScope?.destination.kind === 'country' ? countryName(tripScope.destination.countryCode, tripScope.destination.name) : tripScope?.destination.name ?? ''
+  const tripCategoryName = tripScope?.category === 'roadtrip' && !tripScope.hasFlight ? t.roadTrip : tripScope?.category === 'multi-stop' || tripScope?.category === 'roadtrip' ? t.multiStopTrip : t.trips
+  const renderPlaceCard = (place: PlaceEntry, index: number) => (
+    <button key={place.key} type="button" className="place-card" onClick={() => {
+      setPlaceScope({ kind: placeMode === 'countries' ? 'country' : 'city', key: place.key, name: place.name, countryName: place.countryName, countryCode: place.countryCode })
+      setPlaceViewEnabled(true)
+      setTripScope(null)
       setActiveTab('map')
-    } catch {
-      setError('Filen kunne ikke leses som gyldig JSON.')
-    }
-  }
+      setSelectedPointId(null)
+    }}>
+      <span className="place-rank">{String(index + 1).padStart(2, '0')}</span>
+      <span className="place-card-copy"><strong title={placeName(place)}>{placeName(place)}</strong><small>{placeMode === 'cities' ? countryName(place.countryCode, place.countryName) : t.country}</small></span>
+      <span className="place-days"><strong>{place.days.toLocaleString(locale)}</strong><small>{t.days}</small></span>
+      <span className="place-dates"><small>{place.dates.length > 1 ? t.recentDates : t.date}</small><span>{place.dates.slice(0, 3).map((date) => formatPlaceDate(date, locale)).join(' · ') + (place.dates.length > 3 ? ' · +' + (place.dates.length - 3) : '')}</span></span>
+      <span className="place-card-footer">{place.pointCount.toLocaleString(locale)} {t.locationPoints} <Icon name="arrow" /></span>
+    </button>
+  )
+  const selectedPoint = useMemo(() => selectedPointId === null ? null : mapPoints.find(point => point.id === selectedPointId) ?? null, [mapPoints, selectedPointId])
+  const route = useMemo(() => buildRouteSegments(mapPoints, importedPoints), [mapPoints, importedPoints])
+  const hasFlights = useMemo(() => route.segments.some(segment => segment.transport === 'flight'), [route])
+  const mapDistance = route.distanceKm
+  const distanceLabel = formatDistance(mapDistance, locale)
+  const distanceSeparator = distanceLabel.lastIndexOf(' ')
+  const distanceValue = distanceSeparator < 0 ? distanceLabel : distanceLabel.slice(0, distanceSeparator)
+  const distanceUnit = distanceSeparator < 0 ? '' : distanceLabel.slice(distanceSeparator + 1)
+  const pointGroups = useMemo(() => isPointListExpanded ? groupTimelineSelection(dataset, mapPoints,
+    placeScope && placeViewEnabled ? undefined : dateMode === 'day' ? selectedDate : fromDate,
+    placeScope && placeViewEnabled ? undefined : dateMode === 'day' ? selectedDate : toDate) : [],
+    [dataset, mapPoints, isPointListExpanded, placeScope, placeViewEnabled, dateMode, selectedDate, fromDate, toDate])
+  const displayedDate = dateMode === 'day'
+    ? formatCalendarDate(selectedDate, locale)
+    : fromDate === toDate
+      ? formatCalendarDate(fromDate, locale)
+      : formatCalendarDate(fromDate, locale) + ' – ' + formatCalendarDate(toDate, locale)
 
-  const shiftDay = (direction: -1 | 1) => {
-    const currentIndex = availableDays.indexOf(selectedDate)
-    const nextDay = availableDays[currentIndex + direction]
-    if (nextDay) setSelectedDate(nextDay)
+  const handleLoaded = useCallback((next: TimelineDataset, filename: string) => {
+    const days = next.days.filter(day => day.cleanCount > 0)
+    if (!days.length) throw new Error('No supported calendar dates in this import')
+    const firstDay = days[0]!.day
+    const lastDay = days[days.length - 1]!.day
+    const weekStartDate = new Date(lastDay + 'T12:00:00Z')
+    weekStartDate.setUTCDate(weekStartDate.getUTCDate() - 6)
+    const weekStart = weekStartDate.toISOString().slice(0, 10)
+    setDataset(next)
+    setShowSuspectPoints(false)
+    setQualityDismissed(false)
+    setIsDemo(false)
+    setFileName(filename)
+    setSelectedDate(firstDay)
+    setFromDate(weekStart < firstDay ? firstDay : weekStart)
+    setToDate(lastDay)
+    setDateMode('day')
+    setSelectedPointId(null)
+    setPlaceScope(null)
+    setPlaceViewEnabled(false)
+    setTripScope(null)
+    setActiveTab('map')
+  }, [])
+  const { importFile, cancelImport, stage: importStage, error } = useTimelineImport(handleLoaded)
+  const previousDay = adjacentRecordedDay(availableDays, selectedDate, -1)
+  const nextDay = adjacentRecordedDay(availableDays, selectedDate, 1)
+  const changeDay = (day: string) => {
+    if (!day) return
+    setSelectedDate(day)
+    setPlaceViewEnabled(false)
+    setTripScope(null)
+    setSelectedPointId(null)
   }
+  const shiftDay = (direction: -1 | 1) => {
+    const day = direction === -1 ? previousDay : nextDay
+    if (day) changeDay(day)
+  }
+  const openStatisticsRange = useCallback((from: string, to: string) => {
+    setFromDate(from)
+    setToDate(to)
+    setSelectedDate(from)
+    setDateMode(from === to ? 'day' : 'period')
+    setPlaceViewEnabled(false)
+    setTripScope(null)
+    setSelectedPointId(null)
+    setActiveTab('map')
+  }, [])
+  const openTrip = useCallback((trip: TimelineTrip) => {
+    setTripScope(trip)
+    setPlaceScope(null)
+    setPlaceViewEnabled(false)
+    setFromDate(trip.startDate)
+    setToDate(trip.endDate)
+    setSelectedDate(trip.startDate)
+    setDateMode('period')
+    setSelectedPointId(null)
+    setActiveTab('map')
+  }, [])
+  const changeHomeRadius = useCallback((radius: number) => {
+    setHomeRadiusKm(normalizeHomeRadius(radius))
+    setTripScope(null)
+    setSelectedPointId(null)
+  }, [])
+
+  const qualityNotice = pointQuality.excluded.length > 0 && (qualityDismissed ? (
+    <button className="quality-reopen quiet-button" type="button" onClick={() => setQualityDismissed(false)}>{t.showLocationQuality}</button>
+  ) : (
+    <section className="quality-notice" aria-label={t.locationQuality}>
+      <button className="quality-dismiss" type="button" aria-label={t.dismissQualityNotice} title={t.dismissQualityNotice} onClick={() => setQualityDismissed(true)}><Icon name="close" /></button>
+      <strong>{pointQuality.excluded.length.toLocaleString(locale)} {t.suspectPoints}</strong>
+      <p>{showSuspectPoints ? t.suspectPointsIncluded : t.suspectPointsHidden}</p>
+      <label><input type="checkbox" checked={showSuspectPoints} onChange={event => {
+        setShowSuspectPoints(event.target.checked)
+        setTripScope(null)
+        setSelectedPointId(null)
+      }} />{t.showSuspectPoints}</label>
+      <small>{t.suspectPointsExplanation}</small>
+    </section>
+  ))
 
   return (
     <main className={'app-shell' + (isDark ? ' dark' : '')}>
       <header className="topbar">
         <div className="topbar-title">
-          <span className="eyebrow">DIN HISTORIKK</span>
-          <strong>Utforsk steder</strong>
+          <span className="brand-mark"><Icon name="route" /></span>
+          <strong>Timeline <span>Explorer</span></strong>
         </div>
 
-        <nav className="main-nav" aria-label="Hovedmeny">
-          <button className={'nav-item' + (activeTab === 'map' ? ' is-current' : '')} type="button" onClick={() => setActiveTab('map')}>Kart</button>
-          <button className="nav-item" type="button" disabled title="Kommer senere">Reiser</button>
-          <button className={'nav-item' + (activeTab === 'places' ? ' is-current' : '')} type="button" onClick={() => setActiveTab('places')}>Steder</button>
-          <button className="nav-item" type="button" disabled title="Kommer senere">Statistikk</button>
+        <nav className="main-nav" aria-label={t.navigation}>
+          <button className={'nav-item' + (activeTab === 'map' ? ' is-current' : '')} aria-current={activeTab === 'map' ? 'page' : undefined} type="button" onClick={() => setActiveTab('map')}><Icon name="map" />{t.map}</button>
+          <button className={'nav-item' + (activeTab === 'trips' ? ' is-current' : '')} aria-current={activeTab === 'trips' ? 'page' : undefined} type="button" onClick={() => { setPlacesRequested(true); setTripsRequested(true); setActiveTab('trips') }}><Icon name="route" />{t.trips}</button>
+          <button className={'nav-item' + (activeTab === 'places' ? ' is-current' : '')} aria-current={activeTab === 'places' ? 'page' : undefined} type="button" onClick={() => { setPlacesRequested(true); setActiveTab('places') }}><Icon name="globe" />{t.places}</button>
+          <button className={'nav-item' + (activeTab === 'statistics' ? ' is-current' : '')} aria-current={activeTab === 'statistics' ? 'page' : undefined} type="button" onClick={() => { setPlacesRequested(true); setStatisticsRequested(true); setActiveTab('statistics') }}><Icon name="chart" />{t.statistics}</button>
         </nav>
 
         <div className="topbar-right">
-          <span className="privacy-pill"><span className="privacy-dot" /> Lokal fil</span>
-          <button className="theme-toggle" type="button" aria-label={isDark ? 'Bytt til lyst tema' : 'Bytt til mørkt tema'} title={isDark ? 'Lyst tema' : 'Mørkt tema'} onClick={() => setIsDark((current) => !current)}>{isDark ? '☀' : '☾'}</button>
+          <span className="privacy-pill"><Icon name="shield" /> {t.localFile}</span>
+          <div className="language-switch" role="group" aria-label={t.language}>
+            <button type="button" lang="nb" aria-label="Norsk bokmål" aria-pressed={language === 'nb'} onClick={() => setLanguage('nb')}>NO</button>
+            <button type="button" lang="en" aria-label="English" aria-pressed={language === 'en'} onClick={() => setLanguage('en')}>EN</button>
+          </div>
+          <button className="theme-toggle" type="button" aria-label={isDark ? t.lightTheme : t.darkTheme} title={isDark ? t.lightTheme : t.darkTheme} onClick={() => setIsDark((current) => !current)}><Icon name={isDark ? 'sun' : 'moon'} /></button>
         </div>
       </header>
 
-      {activeTab === 'places' ? (
+      {activeTab === 'places' && (
         <div className="places-page">
-          <div className="places-page-heading"><div><span className="eyebrow">HELE TIDSLINJEN</span><h1>Steder</h1><p>Utforsk hvor du har vært, sortert etter antall dager med registreringer.</p></div><div className="places-total"><strong>{places.length.toLocaleString('no-NO')}</strong><span>{placeMode === 'countries' ? 'land registrert' : 'byer registrert'}</span></div></div>
-          <div className="places-tabs" role="tablist" aria-label="Velg stedstype"><button type="button" role="tab" aria-selected={placeMode === 'countries'} className={placeMode === 'countries' ? 'selected' : ''} onClick={() => setPlaceMode('countries')}>Land <span>{placeAnalysis?.countries.length ?? '–'}</span></button><button type="button" role="tab" aria-selected={placeMode === 'cities'} className={placeMode === 'cities' ? 'selected' : ''} onClick={() => setPlaceMode('cities')}>Byer <span>{placeAnalysis?.cities.length ?? '–'}</span></button></div>
-          {placesLoading && <div className="places-message"><span className="places-spinner" /> Analyserer registreringene dine lokalt …</div>}{placesError && <div className="places-message places-error">{placesError}</div>}
-          {!placesLoading && !placesError && places.length === 0 && <div className="places-empty"><span>⌖</span><strong>Ingen steder å vise ennå</strong><p>Importer Timeline-filen din fra Kart-fanen for å analysere flere steder.</p><button type="button" className="primary-button" onClick={() => setActiveTab('map')}>Gå til kartet</button></div>}
+          <div className="places-page-heading"><div><span className="eyebrow">{t.wholeTimeline}</span><h1>{t.places}</h1><p>{t.placesIntro}</p></div><div className="places-total"><strong>{places.length.toLocaleString(locale)}</strong><span>{placeMode === 'countries' ? t.countriesRegistered : t.citiesRegistered}</span></div></div>
+          <div className="places-tabs" role="tablist" aria-label={t.placeType}><button type="button" role="tab" aria-selected={placeMode === 'countries'} className={placeMode === 'countries' ? 'selected' : ''} onClick={() => setPlaceMode('countries')}>{t.countries} <span>{placeAnalysis?.countries.length.toLocaleString(locale) ?? '–'}</span></button><button type="button" role="tab" aria-selected={placeMode === 'cities'} className={placeMode === 'cities' ? 'selected' : ''} onClick={() => setPlaceMode('cities')}>{t.cities} <span>{placeAnalysis?.cities.length.toLocaleString(locale) ?? '–'}</span></button></div>
+          {qualityNotice}
+          {placesLoading && <div className="places-message"><span className="places-spinner" /> {t.analysing}</div>}{placesError && <div className="places-message places-error" role="alert">{t[placesError]}<button type="button" className="primary-button" onClick={retryPlaces}>{t.retry}</button></div>}
+          {!placesLoading && !placesError && places.length === 0 && <div className="places-empty"><Icon name="globe" /><strong>{t.noPlaces}</strong><p>{t.importForPlaces}</p><button type="button" className="primary-button" onClick={() => setActiveTab('map')}>{t.goToMap}</button></div>}
           {!placesLoading && mainPlaces.length > 0 && <div className="places-grid">{mainPlaces.map(renderPlaceCard)}</div>}
-          {!placesLoading && fewerPlaces.length > 0 && <details className="fewer-places"><summary><span>Vis steder med færre enn 10 punkter</span><span className="count-badge">{fewerPlaces.length}</span></summary><p>Disse stedene kan være korte overflygninger eller unøyaktige GPS-treff.</p><div className="places-grid">{fewerPlaces.map((place, index) => renderPlaceCard(place, mainPlaces.length + index))}</div></details>}
-          <footer className="places-attribution">Byforslag fra <a href="https://www.geonames.org/" target="_blank" rel="noreferrer">GeoNames</a> (CC BY 4.0) · GeoNames-steder fra 2&nbsp;500 innbyggere + Stabekk · nærmeste sted innen 30 km. All posisjonsanalyse skjer lokalt.</footer>
+          {!placesLoading && fewerPlaces.length > 0 && <details className="fewer-places"><summary><span>{t.fewerPlaces}</span><span className="count-badge">{fewerPlaces.length.toLocaleString(locale)}</span></summary><p>{t.fewerPlacesHint}</p><div className="places-grid">{fewerPlaces.map((place, index) => renderPlaceCard(place, mainPlaces.length + index))}</div></details>}
+          <footer className="places-attribution">{t.citySuggestions} <a href="https://www.geonames.org/" target="_blank" rel="noreferrer">GeoNames</a> (CC BY 4.0) · {t.geodataDetails}</footer>
         </div>
-      ) : (
-      <div className="workspace">
+      )}
+      {tripsRequested && <div className="trips-workspace" hidden={activeTab !== 'trips'}>
+        <Suspense fallback={<div className="places-message" role="status"><span className="places-spinner" />{t.analysing}</div>}>
+          <Trips data={trips} loading={tripsLoading} error={placesError ? t[placesError] : undefined} language={language} isDemo={isDemo} homeRadiusKm={homeRadiusKm} onHomeRadiusChange={changeHomeRadius} onRetry={retryPlaces} onOpenTrip={openTrip} />
+        </Suspense>
+      </div>}
+      {statisticsRequested && <div className="statistics-workspace" hidden={activeTab !== 'statistics'}>
+        <Suspense fallback={<div className="places-message" role="status"><span className="places-spinner" />{t.analysing}</div>}>
+          <Statistics data={statistics} loading={statisticsLoading} error={placesError ? t[placesError] : undefined} language={language} isDemo={isDemo} onRetry={retryPlaces} onOpenRange={openStatisticsRange} />
+        </Suspense>
+      </div>}
+      <div className="workspace" hidden={activeTab !== 'map'}>
         <aside className="sidebar">
+          <div className="sidebar-heading"><h1>{t.myTimeline}</h1><span className="sidebar-status"><span />{isDemo ? t.exampleData : t.localFile}</span></div>
           <section className="import-card">
-            <div className="import-icon" aria-hidden="true">↑</div>
+            <div className="import-icon"><Icon name="upload" /></div>
             <div className="import-copy">
-              <strong>{fileName || 'Importer Timeline'}</strong>
-              <span>{isDemo ? 'Prøv med eksempeldatasett' : 'JSON-filen er lastet inn'}</span>
+              <strong title={fileName || t.importTimeline}>{fileName || t.importTimeline}</strong>
+              <span>{isDemo ? t.sampleHint : t.fileLoaded}</span>
             </div>
             <label className="import-button">
-              {isDemo ? 'Velg fil' : 'Bytt fil'}
+              {isDemo ? t.chooseFile : t.changeFile}
               <input
                 type="file"
                 accept=".json,application/json"
-                onChange={(event) => void handleFile(event.target.files?.[0])}
+                onChange={event => { importFile(event.target.files?.[0]); event.target.value = '' }}
               />
             </label>
           </section>
-          {error && <p className="error-message" role="alert">{error}</p>}
+          {importStage && <div className="import-progress" role="status" aria-live="polite"><span className="places-spinner" /><span>{t[importStage]}</span><button type="button" onClick={cancelImport}>{t.cancel}</button></div>}
+          {error && <p className="error-message" role="alert">{t[error]}</p>}
+          {qualityNotice}
 
           <section className="date-section">
             <div className="section-title-row">
-              <h2>Tidspunkt</h2>
+              <h2>{t.time}</h2>
               <button className="quiet-button" type="button" onClick={() => {
                 if (availableDays.length) {
                   setDateMode('day')
-                  setSelectedDate(availableDays[availableDays.length - 1]!)
+                  changeDay(availableDays[availableDays.length - 1]!)
                 }
-              }}>Siste dag</button>
+              }}>{t.lastDay}</button>
             </div>
 
-            <div className="segmented-control" role="tablist" aria-label="Velg tidsrom">
+            <div className="segmented-control" role="tablist" aria-label={t.selectPeriod}>
               <button
                 type="button"
                 role="tab"
                 aria-selected={dateMode === 'day'}
                 className={dateMode === 'day' ? 'selected' : ''}
-                onClick={() => setDateMode('day')}
-              >En dag</button>
+                onClick={() => { setDateMode('day'); setPlaceViewEnabled(false); setTripScope(null) }}
+              >{t.oneDay}</button>
               <button
                 type="button"
                 role="tab"
                 aria-selected={dateMode === 'period'}
                 className={dateMode === 'period' ? 'selected' : ''}
-                onClick={() => {
-                  if (availableDays.length) {
-                    const lastDay = availableDays[availableDays.length - 1]!
-                    const lastDate = new Date(lastDay + 'T12:00:00')
-                    lastDate.setDate(lastDate.getDate() - 6)
-                    const weekStart = [lastDate.getFullYear(), String(lastDate.getMonth() + 1).padStart(2, '0'), String(lastDate.getDate()).padStart(2, '0')].join('-')
-                    setFromDate(weekStart < availableDays[0]! ? availableDays[0]! : weekStart)
-                    setToDate(lastDay)
-                  }
-                  setDateMode('period')
-                }}
-              >Periode</button>
+                onClick={() => { setDateMode('period'); setPlaceViewEnabled(false); setTripScope(null) }}
+              >{t.period}</button>
             </div>
 
             {dateMode === 'day' ? (
               <div className="date-picker-wrap">
                 <div className="date-nav">
-                  <button type="button" aria-label="Forrige dag" onClick={() => shiftDay(-1)} disabled={availableDays.indexOf(selectedDate) <= 0}>‹</button>
+                  <button type="button" aria-label={t.previousDay} onClick={() => shiftDay(-1)} disabled={!previousDay}><Icon name="left" /></button>
                   <label htmlFor="selected-day">{displayedDate}</label>
-                  <button type="button" aria-label="Neste dag" onClick={() => shiftDay(1)} disabled={availableDays.indexOf(selectedDate) < 0 || availableDays.indexOf(selectedDate) >= availableDays.length - 1}>›</button>
+                  <button type="button" aria-label={t.nextDay} onClick={() => shiftDay(1)} disabled={!nextDay}><Icon name="right" /></button>
                 </div>
                 <input
                   id="selected-day"
                   className="date-input"
                   type="date"
                   value={selectedDate}
-                  onChange={(event) => setSelectedDate(event.target.value)}
+                  min={availableDays[0]} max={availableDays[availableDays.length - 1]}
+                  onChange={event => changeDay(event.target.value)}
                 />
-                <div className="date-hint">{availableDays.length} dager med registreringer</div>
+                <div className="date-hint">{availableDays.length.toLocaleString(locale)} {t.recordedDays}</div>
               </div>
             ) : (
               <div className="period-fields">
-                <label>Fra<input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></label>
-                <label>Til<input type="date" value={toDate} min={fromDate} onChange={(event) => setToDate(event.target.value)} /></label>
-                <p>{placeViewEnabled && placeScope ? mapPoints.length.toLocaleString('no-NO') + ' punkter i hele ' + (placeScope.kind === 'country' ? 'landet' : 'byen') : mapPoints.length.toLocaleString('no-NO') + ' punkter i valgt periode'}</p>
+                <label>{t.from}<input type="date" value={fromDate} min={availableDays[0]} max={availableDays[availableDays.length - 1]} onChange={event => { const date = event.target.value; if (!date) return; setFromDate(date); if (date > toDate) setToDate(date); setPlaceViewEnabled(false); setTripScope(null); setSelectedPointId(null) }} /></label>
+                <label>{t.to}<input type="date" value={toDate} min={fromDate} max={availableDays[availableDays.length - 1]} onChange={event => { const date = event.target.value; if (!date) return; setToDate(date); if (date < fromDate) setFromDate(date); setPlaceViewEnabled(false); setTripScope(null); setSelectedPointId(null) }} /></label>
+                <p>{placeViewEnabled && placeScope ? mapPoints.length.toLocaleString(locale) + ' ' + (placeScope.kind === 'country' ? t.pointsInCountry : t.pointsInCity) : mapPoints.length.toLocaleString(locale) + ' ' + t.pointsInPeriod}</p>
               </div>
             )}
           </section>
 
           <section className="summary-section">
             <div className="section-title-row">
-              <h2>Oppsummering</h2>
-              <span className="summary-period">{placeViewEnabled && placeScope ? 'HELE HISTORIKKEN' : dateMode === 'day' ? 'VALGT DAG' : 'VALGT PERIODE'}</span>
+              <h2>{t.summary}</h2>
+              <span className="summary-period">{tripScope ? t.selectedTrip : placeViewEnabled && placeScope ? t.wholeHistory : dateMode === 'day' ? t.selectedDay : t.selectedPeriod}</span>
             </div>
             <div className="summary-grid">
               <div className="summary-card">
-                <span className="summary-icon pin-icon">⌖</span>
-                <div><strong>{mapPoints.length.toLocaleString('no-NO')}</strong><span>punkter</span></div>
+                <span className="summary-metric-label"><Icon name="pin" />{t.points}</span>
+                <strong>{mapPoints.length.toLocaleString(locale)}</strong>
               </div>
               <div className="summary-card">
-                <span className="summary-icon route-icon">↗</span>
-                <div><strong>{formatDistance(mapDistance)}</strong><span>estimert rute</span></div>
+                <span className="summary-metric-label"><Icon name="route" />{t.estimatedRoute}</span>
+                <strong className={'summary-distance' + (distanceValue.length > 9 ? ' compact' : '')} title={distanceLabel}>{distanceValue}<small> {distanceUnit}</small></strong>
               </div>
             </div>
           </section>
@@ -467,139 +348,59 @@ function App() {
           <section className="activity-section">
             <div className="point-list-card">
               <div className="point-list-card-header">
-                <h2>{placeViewEnabled && placeScope ? `Punkter i ${placeScope.name}` : dateMode === 'day' ? 'Punkter denne dagen' : 'Punkter i perioden'}</h2>
-                <span className="count-badge">{mapPoints.length}</span>
+                <h2>{tripScope ? t.tripPoints : placeViewEnabled && placeScope ? `${t.pointsAt} ${scopeName}` : dateMode === 'day' ? t.dayPoints : t.periodPoints}</h2>
+                <span className="count-badge">{mapPoints.length.toLocaleString(locale)}</span>
               </div>
-              {isPointListExpanded && <div className="point-list" id="point-list">
-                {pointGroups.map((group) => (
-                  <details className="point-day-group" key={group.day} open={pointGroups.length === 1}>
-                    <summary><strong>{formatLongDate(group.day)}</strong><span className="count-badge">{group.points.length}</span></summary>
-                    <div className="point-day-rows">
-                      {group.points.slice(0, 80).map((point, index) => (
-                        <button key={point.id} type="button" className={'point-row' + (point.id === selectedPointId ? ' active' : '')} onClick={() => setSelectedPointId(point.id)}>
-                          <span className={'point-symbol ' + (point.kind === 'visit' ? 'visit' : '')}>{point.kind === 'visit' ? '•' : index + 1}</span>
-                          <span className="point-copy"><strong>{point.label}</strong><small>{formatPointDateTime(point.timestamp)} · {point.lat.toFixed(4)}, {point.lng.toFixed(4)}</small></span>
-                          <span className="point-arrow">›</span>
-                        </button>
-                      ))}
-                      {group.points.length > 80 && <p className="list-note">Viser 80 av {group.points.length.toLocaleString('no-NO')} punkter denne dagen.</p>}
-                    </div>
-                  </details>
-                ))}
-                {mapPoints.length === 0 && <div className="empty-list"><span>⌖</span><strong>Ingen punkter i dette utvalget</strong><small>Velg en dato eller et sted med registreringer.</small></div>}
-              </div>}
-              <button className="point-list-disclosure" type="button" aria-expanded={isPointListExpanded} aria-controls="point-list" aria-label={isPointListExpanded ? 'Skjul punkter' : 'Vis punkter'} title={isPointListExpanded ? 'Skjul punkter' : 'Vis punkter'} onClick={() => setIsPointListExpanded((expanded) => !expanded)}>
-                <svg className={'expand-chevron' + (isPointListExpanded ? ' expanded' : '')} viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"><path d="M4 3 L47 13 L50 15 L53 13 L96 3 L96 8.25 L53 18.5 L50 20.5 L47 18.5 L4 8.25 Z" /></svg>
+              <PointList groups={pointGroups} selectedPointId={selectedPointId} onSelect={setSelectedPointId} language={language} expanded={isPointListExpanded} />
+              <button className="point-list-disclosure" type="button" aria-expanded={isPointListExpanded} aria-controls="point-list" aria-label={isPointListExpanded ? t.hidePoints : t.showPoints} title={isPointListExpanded ? t.hidePoints : t.showPoints} onClick={() => setIsPointListExpanded((expanded) => !expanded)}>
+                <span>{isPointListExpanded ? t.hidePoints : t.showPoints}</span><Icon name="down" className={'expand-chevron' + (isPointListExpanded ? ' expanded' : '')} />
               </button>
             </div>
           </section>
 
           <footer className="sidebar-footer">
-            <span className="shield-icon">◇</span>
-            <span><strong>Historikken leses lokalt</strong><small>Kartfliser lastes fra OpenStreetMap.</small></span>
+            <Icon name="shield" className="shield-icon" />
+            <span><strong>{t.localHistory}</strong><small>{t.mapTiles}</small></span>
           </footer>
         </aside>
 
-        <section className="map-area" aria-label="Kart med posisjonshistorikk">
-          <MapContainer className="map-view" center={[59.91, 10.72]} zoom={4} zoomControl={true} preferCanvas={true}>
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            <MapViewport points={mapPoints} />
-            {mapPoints.length > 1 && (
-              <Polyline
-                positions={smoothPositions}
-                smoothFactor={0.35}
-                pathOptions={{ color: '#1a7c72', weight: 3, opacity: 1, lineCap: 'round', lineJoin: 'round' }}
-                eventHandlers={{
-                  click: (event) => {
-                    let nearest = mapPoints[0]!
-                    let nearestDistance = Number.POSITIVE_INFINITY
-                    for (const point of mapPoints) {
-                      const latDistance = point.lat - event.latlng.lat
-                      const lngDistance = (point.lng - event.latlng.lng) * Math.cos((event.latlng.lat * Math.PI) / 180)
-                      const distance = latDistance * latDistance + lngDistance * lngDistance
-                      if (distance < nearestDistance) {
-                        nearest = point
-                        nearestDistance = distance
-                      }
-                    }
-                    setSelectedPointId(nearest.id)
-                  },
-                }}
-              />
-            )}
-            <PointDots points={mapPoints} />
-            {mapPoints[0] && (
-              <CircleMarker
-                center={[mapPoints[0].lat, mapPoints[0].lng]}
-                radius={7}
-                pathOptions={{ color: '#fff', weight: 2, fillColor: '#157d73', fillOpacity: 1 }}
-              >
-                <Popup><strong>Startpunkt</strong><br />{formatPointDateTimeAtLocation(mapPoints[0].timestamp, mapPoints[0].lat, mapPoints[0].lng)}</Popup>
-              </CircleMarker>
-            )}
-            {mapPoints.length > 1 && (
-              <CircleMarker
-                center={[mapPoints[mapPoints.length - 1]!.lat, mapPoints[mapPoints.length - 1]!.lng]}
-                radius={7}
-                pathOptions={{ color: '#fff', weight: 2, fillColor: '#e27a49', fillOpacity: 1 }}
-              >
-                <Popup><strong>Sluttpunkt</strong><br />{formatPointDateTimeAtLocation(mapPoints[mapPoints.length - 1]!.timestamp, mapPoints[mapPoints.length - 1]!.lat, mapPoints[mapPoints.length - 1]!.lng)}</Popup>
-              </CircleMarker>
-            )}
-            {selectedPoint && selectedPoint.id !== mapPoints[0]?.id && selectedPoint.id !== mapPoints[mapPoints.length - 1]?.id && (
-              <CircleMarker
-                center={[selectedPoint.lat, selectedPoint.lng]}
-                radius={8}
-                pathOptions={{ color: '#fff', weight: 3, fillColor: '#d88748', fillOpacity: 1 }}
-              >
-                <Popup><strong>{selectedPoint.label}</strong><br />{formatPointDateTimeAtLocation(selectedPoint.timestamp, selectedPoint.lat, selectedPoint.lng)}</Popup>
-              </CircleMarker>
-            )}
-          </MapContainer>
+        <section className="map-area" aria-label={t.mapLabel}>
+          <TimelineMap points={mapPoints} routeSegments={route.segments} selectedPointId={selectedPointId} isDark={isDark} language={language} onSelect={setSelectedPointId} active={activeTab === 'map'} />
 
           <div className="map-top-overlay">
             <div className="map-context">
-              <span className="context-kicker">{isDemo ? 'EKSEMPELVISNING' : 'TIDSLINJE'}</span>
-              <strong>{placeViewEnabled && placeScope ? placeScope.name : displayedDate}</strong>
+              <span className="context-kicker">{tripScope ? `${tripCategoryName} · ${tripName}` : isDemo ? t.exampleView : t.timeline}</span>
+              <strong>{placeViewEnabled && placeScope ? scopeName : displayedDate}</strong>
             </div>
             <div className="map-actions">
-              {placeScope && <button className={'scope-toggle' + (placeViewEnabled ? ' active' : '')} type="button" onClick={() => setPlaceViewEnabled((enabled) => !enabled)}>{placeViewEnabled ? 'Vis kalender · ' + placeScope.name + ' ×' : 'Vis ' + placeScope.name + ' igjen'}</button>}
-              {isDemo && <span className="demo-badge"><span /> Eksempeldata</span>}
+              {tripScope && <><button className="scope-toggle" type="button" onClick={() => setActiveTab('trips')}>{t.backToTrips}</button><button className="scope-toggle active" type="button" onClick={() => { setTripScope(null); setSelectedPointId(null) }}>{t.showDateRange} ×</button></>}
+              {placeScope && <button className={'scope-toggle' + (placeViewEnabled ? ' active' : '')} type="button" onClick={() => setPlaceViewEnabled((enabled) => !enabled)}>{placeViewEnabled ? t.showCalendar + ' · ' + scopeName + ' ×' : t.showAgain + ' · ' + scopeName}</button>}
+              {isDemo && <span className="demo-badge"><span /> {t.exampleData}</span>}
             </div>
           </div>
 
           <div className="map-bottom-overlay">
-            <div className="map-legend"><span className="legend-line" /> Rute <span className="legend-dot" /> Posisjonspunkt</div>
-            <div className="map-zoom-controls">
-              <button type="button" aria-label="Zoom inn" onClick={() => document.querySelector<HTMLElement>('.leaflet-control-zoom-in')?.click()}>+</button>
-              <button type="button" aria-label="Zoom ut" onClick={() => document.querySelector<HTMLElement>('.leaflet-control-zoom-out')?.click()}>−</button>
+            <div className="map-legend">
+              <span className="legend-item"><span className="legend-line" style={{ background: mapColors.route }} />{t.route}</span>
+              {hasFlights && <span className="legend-item" title={t.flightRouteHint}><span className="legend-line flight" style={{ borderColor: mapColors.route }} />{t.flightRoute}</span>}
+              <span className="legend-item" title={t.zoomHint}><span className="legend-dot" style={{ background: mapColors.point }} />{t.positionPoint}</span>
             </div>
+
           </div>
 
           {selectedPoint && (
             <div className="selected-card">
-              <button type="button" aria-label="Lukk punktdetaljer" onClick={() => setSelectedPointId(null)}>×</button>
-              <span className="selected-kicker">VALGT PUNKT</span>
-              <strong>{selectedPoint.label}</strong>
-              <span>{formatPointDateTimeAtLocation(selectedPoint.timestamp, selectedPoint.lat, selectedPoint.lng)} · {selectedPoint.lat.toFixed(5)}, {selectedPoint.lng.toFixed(5)}</span>
+              <button type="button" aria-label={t.closeDetails} onClick={() => setSelectedPointId(null)}><Icon name="close" /></button>
+              <span className="selected-kicker">{t.selectedPoint}</span>
+              <strong>{pointLabel(selectedPoint, language)}</strong>
+              {suspectPointIds.has(selectedPoint.id) && <small className="suspect-point-label">{t.suspectPointLabel}</small>}
+              <span>{formatPointInterval(selectedPoint, locale, true)} · {selectedPoint.lat.toFixed(5)}, {selectedPoint.lng.toFixed(5)}</span>
             </div>
           )}
         </section>
       </div>
-      )}
     </main>
   )
 }
 
 export default App
-
-
-
-
-
-
-
-

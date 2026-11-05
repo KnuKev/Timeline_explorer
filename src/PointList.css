@@ -1,0 +1,87 @@
+.point-list {
+  min-height: 0;
+  max-height: min(42vh, 420px);
+  margin-top: 10px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.point-list[hidden] { display: none; }
+
+.point-day-group { border-top: 1px solid var(--border); }
+.point-day-group > summary {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 2px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  list-style: none;
+}
+.point-day-group > summary::-webkit-details-marker { display: none; }
+.point-day-group > summary strong { font-size: 12px; font-weight: 600; line-height: 1.4; }
+.point-day-group > summary .count-badge { margin-left: auto; }
+.point-day-chevron { flex: 0 0 16px; color: var(--text-tertiary); transition: transform 140ms ease; }
+.point-day-group[open] > summary .point-day-chevron { transform: rotate(90deg); }
+.point-day-rows { padding-bottom: 4px; }
+
+.point-row {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 72px;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+.point-row + .point-row::before { position: absolute; top: 0; left: 46px; right: 8px; height: 1px; background: var(--border); content: ''; }
+.point-row:hover { background: var(--surface-muted); }
+.point-row.active { background: var(--accent-soft); }
+.point-row.active .point-copy strong { color: var(--accent); }
+.point-row.active::before, .point-row.active + .point-row::before { opacity: 0; }
+.point-symbol {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.point-symbol.visit { background: var(--accent-soft); color: var(--accent); }
+.point-row.active .point-symbol { background: var(--surface-raised); color: var(--accent); }
+.point-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; }
+.point-copy strong { overflow: hidden; color: var(--text); font-size: 12px; font-weight: 600; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+.point-copy small { display: block; font-variant-numeric: tabular-nums; line-height: 1.4; }
+.point-interval { color: var(--text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.point-coordinates { color: var(--text-tertiary); font-size: 11px; letter-spacing: .02em; }
+.point-arrow { flex: 0 0 16px; color: var(--text-tertiary); }
+.point-row.active .point-arrow { color: var(--accent); }
+
+.point-list-pagination { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 10px 0; color: var(--text-secondary); font-size: 10px; line-height: 1.4; font-variant-numeric: tabular-nums; }
+.point-list > .point-list-pagination { position: sticky; top: 0; z-index: 1; background: var(--surface); border-bottom: 1px solid var(--border); }
+.point-list-pagination span { flex: 1; text-align: center; }
+.point-list-pagination button { flex: 0 0 auto; min-height: 32px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-raised); color: var(--text); font-size: 11px; font-weight: 500; cursor: pointer; transition: background 140ms ease; }
+.point-list-pagination button:hover:not(:disabled) { background: var(--surface-muted); }
+.point-list-pagination button:disabled { opacity: .4; cursor: default; }
+.point-list-pagination button:focus-visible, .point-day-group > summary:focus-visible, .point-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.empty-list { display: flex; min-height: 150px; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 20px 12px; color: var(--text-tertiary); text-align: center; }
+.empty-list > svg { margin-bottom: 4px; }
+.empty-list strong { color: var(--text-secondary); font-size: 13px; font-weight: 600; }
+.empty-list small { font-size: 12px; line-height: 1.5; }
+
+@media (max-width: 680px) { .point-list { max-height: 28vh; } }
+@media (prefers-reduced-motion: reduce) { .point-row, .point-day-chevron, .point-list-pagination button { transition: none; } }
