@@ -21,15 +21,22 @@ type PlaceScope = { kind: 'country' | 'city'; name: string; key: string; country
 const Statistics = lazy(() => import('./Statistics.tsx'))
 const Trips = lazy(() => import('./Trips.tsx'))
 
-const demoPoints: TimelinePoint[] = [
-  { id: 'demo-1', lat: 59.907716, lng: 10.590889, timestamp: '2026-10-13T17:04:00.000Z', kind: 'path', label: 'Rutepunkt' },
-  { id: 'demo-2', lat: 59.902392, lng: 10.577196, timestamp: '2026-10-13T17:06:00.000Z', kind: 'path', label: 'Rutepunkt' },
-  { id: 'demo-3', lat: 59.900471, lng: 10.575260, timestamp: '2026-10-13T17:07:00.000Z', kind: 'path', label: 'Rutepunkt' },
-  { id: 'demo-4', lat: 59.902210, lng: 10.612880, timestamp: '2026-10-13T17:21:00.000Z', kind: 'path', label: 'Rutepunkt' },
-  { id: 'demo-5', lat: 59.911420, lng: 10.651210, timestamp: '2026-10-13T17:43:00.000Z', kind: 'path', label: 'Rutepunkt' },
-  { id: 'demo-6', lat: 59.914800, lng: 10.702100, timestamp: '2026-10-13T18:12:00.000Z', kind: 'path', label: 'Rutepunkt' },
-  { id: 'demo-7', lat: 59.913100, lng: 10.746200, timestamp: '2026-10-13T18:31:00.000Z', kind: 'path', label: 'Rutepunkt' },
-  { id: 'demo-8', lat: 59.920600, lng: 10.762900, timestamp: '2026-10-13T19:00:00.000Z', kind: 'path', label: 'Rutepunkt' },
+// A fictional walk from the Louvre through the Tuileries gardens.
+const demoDate = '2025-06-07'
+function demoPoint(time: string, lat: number, lng: number): TimelinePoint {
+  return { id: `demo-${time}`, lat, lng, timestamp: `${demoDate}T${time}:00.000Z`, kind: 'path', label: 'Rutepunkt' }
+}
+const demoPoints = [
+  demoPoint('08:00', 48.8606, 2.3376),
+  demoPoint('08:03', 48.8612, 2.3350),
+  demoPoint('08:06', 48.8617, 2.3329),
+  demoPoint('08:10', 48.8625, 2.3304),
+  demoPoint('08:13', 48.8630, 2.3286),
+  demoPoint('08:17', 48.8637, 2.3264),
+  demoPoint('08:20', 48.8643, 2.3242),
+  demoPoint('08:24', 48.8651, 2.3224),
+  demoPoint('08:26', 48.8649, 2.3214),
+  demoPoint('08:30', 48.8656, 2.3195),
 ]
 
 function App() {
@@ -64,9 +71,9 @@ function App() {
   const mapColors = getMapColors(isDark)
   const [isPointListExpanded, setIsPointListExpanded] = useState(false)
   const [dateMode, setDateMode] = useState<DateMode>('day')
-  const [selectedDate, setSelectedDate] = useState('2026-10-13')
-  const [fromDate, setFromDate] = useState('2026-10-13')
-  const [toDate, setToDate] = useState('2026-10-13')
+  const [selectedDate, setSelectedDate] = useState(demoDate)
+  const [fromDate, setFromDate] = useState(demoDate)
+  const [toDate, setToDate] = useState(demoDate)
   const [fileName, setFileName] = useState('')
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null)
   const { data: placeAnalysis, statistics, trips, loading: placesLoading, statisticsLoading, tripsLoading, error: placesError, retry: retryPlaces } = usePlaces(dataset, showSuspectPoints, placesRequested, statisticsRequested, tripsRequested, homeRadiusKm)

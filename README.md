@@ -1,19 +1,17 @@
 # Timeline Explorer
 
-Explore your Google Timeline history in a desktop browser. Your Timeline file stays in browser memory. OpenStreetMap receives tile requests for the area you view.
+Explore your Google Timeline history on an interactive map in a desktop browser.
 
 ## Get started
 
-Install **Node.js 24 with npm**, then clone this repository or download and extract the ZIP. In the project folder, run:
+1. Open [Timeline Explorer](https://knukev.github.io/Timeline_explorer/) and try the fictional example route. No installation or account is needed.
+2. To explore your own history, open **Map → Choose file** and select a Google Timeline JSON export. Mobile Timeline exports and older Takeout files such as `Records.json` are supported. Unzip archived exports first.
 
-```sh
-npm ci
-npm run dev
-```
+Your file stays in browser memory and is never uploaded to GitHub. Refreshing the page clears it. OpenStreetMap receives map tile requests for the area you view.
 
-Open the local address printed in the terminal. On Windows, use `npm.cmd` if PowerShell blocks `npm`.
+## Run locally
 
-In **Map**, click **Choose file** and select one Google Timeline JSON export. Both mobile Timeline exports and older Takeout files such as `Records.json` are supported. Unzip archived exports first. After a page refresh, choose your file again.
+Install **Node.js 24 with npm**, clone this repository or extract the ZIP, then run `npm ci` and `npm run dev` in the project folder. Open the local address printed in the terminal.
 
 ## Explore your history
 
@@ -25,6 +23,14 @@ In **Map**, click **Choose file** and select one Google Timeline JSON export. Bo
 ## Development
 
 Use `npm test`, `npm run lint`, and `npm run build` to check changes.
+
+## Publish to GitHub Pages
+
+1. In the repository's [Settings → Pages](https://github.com/KnuKev/Timeline_explorer/settings/pages), under **Build and deployment → Source**, select **GitHub Actions**.
+2. Push the reviewed changes, including [the deployment workflow](.github/workflows/pages.yml), to `main`.
+3. Under **Actions → Deploy to GitHub Pages**, wait for the **deploy** job to finish. Open the site link in the deployment summary.
+
+Each subsequent push to `main` runs the checks and publishes only the built site (`dist/`). To redeploy the same commit, select **Run workflow** on `main`.
 
 ## Credits
 
