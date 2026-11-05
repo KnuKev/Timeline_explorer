@@ -18,8 +18,8 @@ import './App.css'
 type DateMode = 'day' | 'period'
 type ActiveTab = 'map' | 'trips' | 'places' | 'statistics'
 type PlaceScope = { kind: 'country' | 'city'; name: string; key: string; countryName?: string; countryCode?: string }
-const Statistics = lazy(() => import('./Statistics'))
-const Trips = lazy(() => import('./Trips'))
+const Statistics = lazy(() => import('./Statistics.tsx'))
+const Trips = lazy(() => import('./Trips.tsx'))
 
 const demoPoints: TimelinePoint[] = [
   { id: 'demo-1', lat: 59.907716, lng: 10.590889, timestamp: '2026-10-13T17:04:00.000Z', kind: 'path', label: 'Rutepunkt' },
