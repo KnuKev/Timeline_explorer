@@ -1,5 +1,5 @@
 const nb = {
-  title: 'Statistikk', eyebrow: 'DIN HISTORIKK', intro: 'Et nytt perspektiv på stedene og reisene dine.',
+  title: 'Statistikk',
   all: 'Hele historikken', year: 'År', sample: 'Eksempeldata', overview: 'Oversikt',
   distance: 'Estimert distanse', countries: 'Land', cities: 'Byer og områder', recordedDays: 'Registrerte dager',
   monthly: 'Måned for måned', monthlyIntro: 'Reisedistanse fordelt på årets måneder.',
@@ -31,7 +31,7 @@ const nb = {
 }
 
 const en: Record<keyof typeof nb, string> = {
-  title: 'Statistics', eyebrow: 'YOUR HISTORY', intro: 'A new perspective on your places and journeys.',
+  title: 'Statistics',
   all: 'All time', year: 'Year', sample: 'Sample data', overview: 'Overview',
   distance: 'Estimated distance', countries: 'Countries', cities: 'Cities and areas', recordedDays: 'Recorded days',
   monthly: 'Month by month', monthlyIntro: 'Travel distance across the months of the year.',

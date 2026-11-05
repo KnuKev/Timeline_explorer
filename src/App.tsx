@@ -119,12 +119,6 @@ function App() {
     placeScope && placeViewEnabled ? undefined : dateMode === 'day' ? selectedDate : fromDate,
     placeScope && placeViewEnabled ? undefined : dateMode === 'day' ? selectedDate : toDate) : [],
     [dataset, mapPoints, isPointListExpanded, placeScope, placeViewEnabled, dateMode, selectedDate, fromDate, toDate])
-  const displayedDate = dateMode === 'day'
-    ? formatCalendarDate(selectedDate, locale)
-    : fromDate === toDate
-      ? formatCalendarDate(fromDate, locale)
-      : formatCalendarDate(fromDate, locale) + ' – ' + formatCalendarDate(toDate, locale)
-
   const handleLoaded = useCallback((next: TimelineDataset, filename: string) => {
     const days = next.days.filter(day => day.cleanCount > 0)
     if (!days.length) throw new Error('No supported calendar dates in this import')
@@ -206,22 +200,16 @@ function App() {
   ))
 
   return (
-    <main className={'app-shell' + (isDark ? ' dark' : '')}>
-      <header className="topbar">
-        <div className="topbar-title">
-          <span className="brand-mark"><Icon name="route" /></span>
-          <strong>Timeline <span>Explorer</span></strong>
-        </div>
-
+    <main className={'app-shell' + (isDark ? ' dark' : '')} data-view={activeTab}>
+      <header className="floating-toolbar">
         <nav className="main-nav" aria-label={t.navigation}>
-          <button className={'nav-item' + (activeTab === 'map' ? ' is-current' : '')} aria-current={activeTab === 'map' ? 'page' : undefined} type="button" onClick={() => setActiveTab('map')}><Icon name="map" />{t.map}</button>
-          <button className={'nav-item' + (activeTab === 'trips' ? ' is-current' : '')} aria-current={activeTab === 'trips' ? 'page' : undefined} type="button" onClick={() => { setPlacesRequested(true); setTripsRequested(true); setActiveTab('trips') }}><Icon name="route" />{t.trips}</button>
-          <button className={'nav-item' + (activeTab === 'places' ? ' is-current' : '')} aria-current={activeTab === 'places' ? 'page' : undefined} type="button" onClick={() => { setPlacesRequested(true); setActiveTab('places') }}><Icon name="globe" />{t.places}</button>
-          <button className={'nav-item' + (activeTab === 'statistics' ? ' is-current' : '')} aria-current={activeTab === 'statistics' ? 'page' : undefined} type="button" onClick={() => { setPlacesRequested(true); setStatisticsRequested(true); setActiveTab('statistics') }}><Icon name="chart" />{t.statistics}</button>
+          <button className={'nav-item' + (activeTab === 'map' ? ' is-current' : '')} aria-current={activeTab === 'map' ? 'page' : undefined} type="button" onClick={() => setActiveTab('map')}><Icon name="map" /><span>{t.map}</span></button>
+          <button className={'nav-item' + (activeTab === 'trips' ? ' is-current' : '')} aria-current={activeTab === 'trips' ? 'page' : undefined} type="button" onClick={() => { setPlacesRequested(true); setTripsRequested(true); setActiveTab('trips') }}><Icon name="route" /><span>{t.trips}</span></button>
+          <button className={'nav-item' + (activeTab === 'places' ? ' is-current' : '')} aria-current={activeTab === 'places' ? 'page' : undefined} type="button" onClick={() => { setPlacesRequested(true); setActiveTab('places') }}><Icon name="globe" /><span>{t.places}</span></button>
+          <button className={'nav-item' + (activeTab === 'statistics' ? ' is-current' : '')} aria-current={activeTab === 'statistics' ? 'page' : undefined} type="button" onClick={() => { setPlacesRequested(true); setStatisticsRequested(true); setActiveTab('statistics') }}><Icon name="chart" /><span>{t.statistics}</span></button>
         </nav>
 
-        <div className="topbar-right">
-          <span className="privacy-pill"><Icon name="shield" /> {t.localFile}</span>
+        <div className="display-controls">
           <div className="language-switch" role="group" aria-label={t.language}>
             <button type="button" lang="nb" aria-label="Norsk bokmål" aria-pressed={language === 'nb'} onClick={() => setLanguage('nb')}>NO</button>
             <button type="button" lang="en" aria-label="English" aria-pressed={language === 'en'} onClick={() => setLanguage('en')}>EN</button>
@@ -232,7 +220,16 @@ function App() {
 
       {activeTab === 'places' && (
         <div className="places-page">
-          <div className="places-page-heading"><div><span className="eyebrow">{t.wholeTimeline}</span><h1>{t.places}</h1><p>{t.placesIntro}</p></div><div className="places-total"><strong>{places.length.toLocaleString(locale)}</strong><span>{placeMode === 'countries' ? t.countriesRegistered : t.citiesRegistered}</span></div></div>
+          <header className="places-page-heading">
+            <div className="report-heading">
+              <h1>{t.places}</h1>
+              <div className="places-total">
+                <strong>{places.length.toLocaleString(locale)}</strong>
+                <span>{placeMode === 'countries' ? t.countriesRegistered : t.citiesRegistered}</span>
+              </div>
+            </div>
+            <p>{t.placesIntro}</p>
+          </header>
           <div className="places-tabs" role="tablist" aria-label={t.placeType}><button type="button" role="tab" aria-selected={placeMode === 'countries'} className={placeMode === 'countries' ? 'selected' : ''} onClick={() => setPlaceMode('countries')}>{t.countries} <span>{placeAnalysis?.countries.length.toLocaleString(locale) ?? '–'}</span></button><button type="button" role="tab" aria-selected={placeMode === 'cities'} className={placeMode === 'cities' ? 'selected' : ''} onClick={() => setPlaceMode('cities')}>{t.cities} <span>{placeAnalysis?.cities.length.toLocaleString(locale) ?? '–'}</span></button></div>
           {qualityNotice}
           {placesLoading && <div className="places-message"><span className="places-spinner" /> {t.analysing}</div>}{placesError && <div className="places-message places-error" role="alert">{t[placesError]}<button type="button" className="primary-button" onClick={retryPlaces}>{t.retry}</button></div>}
@@ -306,7 +303,7 @@ function App() {
               <div className="date-picker-wrap">
                 <div className="date-nav">
                   <button type="button" aria-label={t.previousDay} onClick={() => shiftDay(-1)} disabled={!previousDay}><Icon name="left" /></button>
-                  <label htmlFor="selected-day">{displayedDate}</label>
+                  <label htmlFor="selected-day">{formatCalendarDate(selectedDate, locale)}</label>
                   <button type="button" aria-label={t.nextDay} onClick={() => shiftDay(1)} disabled={!nextDay}><Icon name="right" /></button>
                 </div>
                 <input
@@ -327,6 +324,15 @@ function App() {
               </div>
             )}
           </section>
+
+          {(tripScope || placeScope) && <div className="scope-actions">
+            {tripScope && <>
+              <strong>{tripCategoryName} · {tripName}</strong>
+              <button className="scope-toggle" type="button" onClick={() => setActiveTab('trips')}>{t.backToTrips}</button>
+              <button className="scope-toggle active" type="button" onClick={() => { setTripScope(null); setSelectedPointId(null) }}>{t.showDateRange} ×</button>
+            </>}
+            {placeScope && <button className={'scope-toggle' + (placeViewEnabled ? ' active' : '')} type="button" onClick={() => setPlaceViewEnabled(enabled => !enabled)}>{placeViewEnabled ? t.showCalendar + ' · ' + scopeName + ' ×' : t.showAgain + ' · ' + scopeName}</button>}
+          </div>}
 
           <section className="summary-section">
             <div className="section-title-row">
@@ -358,26 +364,10 @@ function App() {
             </div>
           </section>
 
-          <footer className="sidebar-footer">
-            <Icon name="shield" className="shield-icon" />
-            <span><strong>{t.localHistory}</strong><small>{t.mapTiles}</small></span>
-          </footer>
         </aside>
 
         <section className="map-area" aria-label={t.mapLabel}>
           <TimelineMap points={mapPoints} routeSegments={route.segments} selectedPointId={selectedPointId} isDark={isDark} language={language} onSelect={setSelectedPointId} active={activeTab === 'map'} />
-
-          <div className="map-top-overlay">
-            <div className="map-context">
-              <span className="context-kicker">{tripScope ? `${tripCategoryName} · ${tripName}` : isDemo ? t.exampleView : t.timeline}</span>
-              <strong>{placeViewEnabled && placeScope ? scopeName : displayedDate}</strong>
-            </div>
-            <div className="map-actions">
-              {tripScope && <><button className="scope-toggle" type="button" onClick={() => setActiveTab('trips')}>{t.backToTrips}</button><button className="scope-toggle active" type="button" onClick={() => { setTripScope(null); setSelectedPointId(null) }}>{t.showDateRange} ×</button></>}
-              {placeScope && <button className={'scope-toggle' + (placeViewEnabled ? ' active' : '')} type="button" onClick={() => setPlaceViewEnabled((enabled) => !enabled)}>{placeViewEnabled ? t.showCalendar + ' · ' + scopeName + ' ×' : t.showAgain + ' · ' + scopeName}</button>}
-              {isDemo && <span className="demo-badge"><span /> {t.exampleData}</span>}
-            </div>
-          </div>
 
           <div className="map-bottom-overlay">
             <div className="map-legend">

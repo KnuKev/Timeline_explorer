@@ -129,28 +129,26 @@ test('a trip with any flight cannot display a road-trip badge even if a category
   assert.match(recentRows(render(analysis([driving])))[0]!, /trips-category">Road trip/)
 })
 
-test('home metadata and Norwegian controls explain recorded nights, moving home and the selected radius', () => {
+test('Norwegian controls explain the selected radius without showing the user’s home history', () => {
   const data = analysis()
   data.homes.unshift({ key: 'old-home', name: 'Old village', startDate: '2020-01-01', lat: 60, lng: 11, recordedNights: 14, explicit: true })
   const html = render(data, 'nb')
   assert.match(html, /Innlands/)
   assert.match(html, /Utlands/)
   assert.match(html, /innenfor 25 km/)
-  assert.match(html, /<strong>Home village<\/strong>/)
-  assert.match(html, /32 registrerte netter/)
-  assert.doesNotMatch(html, /<strong>Old village<\/strong>/)
+  assert.doesNotMatch(html, /Home village|Old village|32 registrerte netter|Senest registrerte hjemmebase/)
   assert.match(html, /30 registrerte netter[^<]*60 dager/)
   assert.match(html, /nettene trenger ikke være sammenhengende/)
   assert.match(html, /hjemmemerking gi en hjemmebase med færre netter/)
   assert.match(html, /aria-label="Vis på kartet: Fjord Cabin/)
 })
 
-test('changing radius hides stale trips and home metadata while keeping configuration usable', () => {
+test('changing radius hides stale trips while keeping configuration usable', () => {
   const html = render(analysis(), 'en', 50)
   assert.match(html, /role="status"/)
   assert.match(html, /<option value="50" selected="">50 km<\/option>/)
   assert.match(html, /within 50 km/)
-  assert.doesNotMatch(html, /trips-overview|trips-recent-list|<strong>Home village<\/strong>/)
+  assert.doesNotMatch(html, /trips-overview|trips-recent-list/)
   const matching = { ...analysis(), homeRadiusKm: 50 }
   assert.equal(recentRows(render(matching, 'en', 50)).length, 2)
 })

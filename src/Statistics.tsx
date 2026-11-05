@@ -209,7 +209,16 @@ function StatisticsContent({ data, language, isDemo, onOpenRange }: Omit<Props, 
   const period = year === null ? data.all : data.byYear[String(year)] ?? data.all
   const years = useMemo(() => [...data.years].sort((a, b) => b - a), [data.years])
   return <>
-    <header className="statistics-heading"><div><span className="eyebrow">{t.eyebrow}</span><h1>{t.title}{isDemo && <span className="statistics-sample">{t.sample}</span>}</h1><p>{t.intro}</p></div><label className="statistics-select"><span>{t.range}</span><select value={year ?? 'all'} onChange={event => setSelectedYear(event.target.value === 'all' ? null : Number(event.target.value))}><option value="all">{t.all}</option>{years.map(value => <option key={value} value={value}>{value}</option>)}</select></label></header>
+    <header className="report-heading statistics-heading">
+      <h1>{t.title}{isDemo && <span className="statistics-sample">{t.sample}</span>}</h1>
+      <label className="statistics-select">
+        <span>{t.range}</span>
+        <select value={year ?? 'all'} onChange={event => setSelectedYear(event.target.value === 'all' ? null : Number(event.target.value))}>
+          <option value="all">{t.all}</option>
+          {years.map(value => <option key={value} value={value}>{value}</option>)}
+        </select>
+      </label>
+    </header>
     <Overview period={period} language={language} t={t} />
     <div className="statistics-layout">
       <MonthlyChart data={data} period={period} year={year} language={language} t={t} onOpenRange={onOpenRange} />

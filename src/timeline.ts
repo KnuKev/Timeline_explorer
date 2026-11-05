@@ -9,6 +9,8 @@ export type TimelinePoint = {
   // Keep observed paths separate from Google's inferred visits/activity anchors.
   // Routes can then prefer timed path evidence when semantic records conflict.
   source?: 'timelinePath' | 'raw' | 'activity' | 'visit'
+  // Consecutive samples from one timelinePath can share a whole-minute offset.
+  minutePathLink?: { previousId: string; runDistanceKm: number }
   // Canonical activities are retained on their endpoints, including duplicate
   // endpoints that also occur in a measured path. Alternatives are not imported.
   activities?: TimelineActivity[]
@@ -90,6 +92,14 @@ function transportMode(value: unknown): TransportMode | undefined {
   return undefined
 }
 
+function recordMinuteLinks(run: TimelinePoint[]) {
+  if (run.length < 2) return
+  const runDistanceKm = distanceKm(run)
+  for (let index = 1; index < run.length; index++) {
+    run[index]!.minutePathLink ??= { previousId: run[index - 1]!.id, runDistanceKm }
+  }
+}
+
 export function parseTimeline(input: unknown): TimelinePoint[] {
   const points: TimelinePoint[] = []
   const seen = new WeakSet<object>()
@@ -151,16 +161,23 @@ export function parseTimeline(input: unknown): TimelinePoint[] {
     const end = isoTime(record.endTime)
 
     if (Array.isArray(record.timelinePath)) {
+      const minuteRun: TimelinePoint[] = []
       for (const rawPoint of record.timelinePath) {
         const item = asRecord(rawPoint)
-        if (!item) continue
-        const offset = finiteNumber(item.durationMinutesOffsetFromStartTime)
+        const offset = finiteNumber(item?.durationMinutesOffsetFromStartTime)
         const offsetTime = start && offset !== null
           ? millisecondsTime(new Date(start).getTime() + offset * 60_000)
           : null
-        const timestamp = isoTime(item.time) ?? isoTime(item.timestamp) ?? offsetTime
-        addPoint(item.point, timestamp, 'path', 'Rutepunkt', 'timelinePath')
+        const exactTime = isoTime(item?.time) ?? isoTime(item?.timestamp)
+        const point = addPoint(item?.point, exactTime ?? offsetTime, 'path', 'Rutepunkt', 'timelinePath')
+        const wholeMinute = point && !exactTime && Number.isInteger(offset)
+        if (!wholeMinute || point.timestamp !== minuteRun[0]?.timestamp) {
+          recordMinuteLinks(minuteRun)
+          minuteRun.length = 0
+        }
+        if (wholeMinute && point !== minuteRun.at(-1)) minuteRun.push(point)
       }
+      recordMinuteLinks(minuteRun)
     }
 
     const visit = asRecord(record.visit)

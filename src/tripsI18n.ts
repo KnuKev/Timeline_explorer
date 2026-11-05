@@ -1,9 +1,8 @@
 const nb = {
-  title: 'Reiser', eyebrow: 'DIN HISTORIKK', intro: 'Stedene du vender tilbake til, og reisene mellom dem.',
+  title: 'Reiser', intro: 'Fullførte reiser med minst to netter borte.',
   sample: 'Eksempeldata', year: 'Avreiseår', all: 'Hele historikken', overview: 'Reiseoversikt',
   domestic: 'Innlands', international: 'Utlands', unknownScope: 'Uavklart', tripScope: 'Reisekategori',
-  homeRadius: 'Hjemmeområde', radiusHint: 'En registrering innenfor {radius} km fra den aktuelle hjemmebasen avslutter reisen.',
-  latestHome: 'Senest registrerte hjemmebase', homeSince: 'Fra', recordedNights: 'registrerte netter', explicitHome: 'hjemmemerking i filen', homeFound: 'Hjem funnet i historikken',
+  homeRadius: 'Hjemmeområde', radiusHint: 'Reisen avsluttes når du registreres innenfor {radius} km fra hjemmet.',
   completedTrips: 'Fullførte reiser', completedHint: 'Med minst to netter borte',
   destinations: 'Reisemål', destination: 'Reisemål', nights: 'Netter borte',
   destinationsHint: 'Ulike hovedreisemål i perioden. Reiser uten ett hovedreisemål vises i reiselisten.',
@@ -36,11 +35,10 @@ const nb = {
 }
 
 const en: Record<keyof typeof nb, string> = {
-  title: 'Trips', eyebrow: 'YOUR HISTORY', intro: 'The places you return to, and the journeys between them.',
+  title: 'Trips', intro: 'Completed trips with at least two nights away.',
   sample: 'Sample data', year: 'Departure year', all: 'All time', overview: 'Trip overview',
   domestic: 'Domestic', international: 'International', unknownScope: 'Unclassified', tripScope: 'Trip category',
-  homeRadius: 'Home area', radiusHint: 'A record within {radius} km of the applicable home base ends the trip.',
-  latestHome: 'Latest recorded home base', homeSince: 'Since', recordedNights: 'recorded nights', explicitHome: 'home labels in the file', homeFound: 'Home found in your history',
+  homeRadius: 'Home area', radiusHint: 'A recorded return within {radius} km of home ends the trip.',
   completedTrips: 'Completed trips', completedHint: 'With at least two nights away',
   destinations: 'Destinations', destination: 'Destination', nights: 'Nights away',
   destinationsHint: 'Distinct main destinations in this period. Trips without one main destination appear in the trip list.',

@@ -13,6 +13,9 @@ const MAX_SPEED_KMH = 1300
 const MAX_MEASURED_TIMING_SPEED_KMH = 1500
 const MIN_SPEED_CHECK_KM = 10
 const SAME_TIME_TOLERANCE_KM = 0.1
+// A whole minute can reasonably contain up to 3 km of local travel (180 km/h).
+// Apply this to the complete ordered run, not separately to each leg.
+const MAX_MINUTE_PATH_KM = 3
 type SourceIndices = number | number[]
 type Recovery = { end: number; distanceKm: number }
 type ActivityInterval = { activity: TimelineActivity; start: number; end: number; maximumEnd: number; inferred?: boolean }
@@ -109,12 +112,13 @@ function withTransport(edge: Edge | null, previous: TimelinePoint | undefined, c
   const visitEnd = previous.kind === 'visit' && previous.endTimestamp ? Date.parse(previous.endTimestamp) : NaN
   if (Number.isFinite(visitEnd) && visitEnd >= start && visitEnd <= end) start = visitEnd
   const elapsed = end - start
-  if (elapsed <= 0) return edge
+  // A rounded-minute edge can inherit an activity covering that instant.
+  if (elapsed < 0 || (elapsed === 0 && !edge.estimated)) return edge
   let left = 0
   let right = intervals.length
   while (left < right) {
     const middle = (left + right) >>> 1
-    if (intervals[middle]!.start < end) left = middle + 1
+    if (intervals[middle]!.start <= end) left = middle + 1
     else right = middle
   }
   let surfaceEvidence = false
@@ -133,7 +137,7 @@ function withTransport(edge: Edge | null, previous: TimelinePoint | undefined, c
     }
     surfaceEvidence = true
   }
-  if (!surfaceEvidence && (flightRun || (edge.distanceKm >= 250 && edge.distanceKm * 3_600_000 / elapsed >= 300))) return { ...edge, transport: 'flight' }
+  if (!surfaceEvidence && (flightRun || (elapsed > 0 && edge.distanceKm >= 250 && edge.distanceKm * 3_600_000 / elapsed >= 300))) return { ...edge, transport: 'flight' }
   return edge
 }
 
@@ -151,7 +155,12 @@ function analyseEdge(previous: TimelinePoint, current: TimelinePoint, allowMeasu
 
   const kilometers = distanceKm([previous, current])
   if (!Number.isFinite(kilometers)) return { reason: 'invalid-distance' }
-  if (elapsed === 0 && kilometers > SAME_TIME_TOLERANCE_KM) return { reason: 'same-time' }
+  if (elapsed === 0) {
+    const link = current.minutePathLink
+    if (previous.source === 'timelinePath' && current.source === 'timelinePath' && link?.previousId === previous.id
+      && link.runDistanceKm <= MAX_MINUTE_PATH_KM) return { distanceKm: kilometers, estimated: true }
+    if (kilometers > SAME_TIME_TOLERANCE_KM) return { reason: 'same-time' }
+  }
   let uncertainTiming = false
   if (elapsed > 0 && kilometers > MIN_SPEED_CHECK_KM) {
     const speed = kilometers / (elapsed / 3_600_000)

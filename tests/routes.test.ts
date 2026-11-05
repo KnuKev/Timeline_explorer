@@ -5,6 +5,34 @@ import { distanceKm, parseTimeline, type TimelinePoint } from '../src/timeline.t
 
 const point = (id: string, lat: number, lng: number, timestamp: string): TimelinePoint => ({ id, lat, lng, timestamp, kind: 'path', label: 'Rutepunkt' })
 
+test('ordered samples with the same minute offset retain their short route and original timestamps', () => {
+  const timestamp = '2026-10-13T08:24:00.000Z'
+  const samples = ['0,10', '0,10.002', '0,10.006'].map(point => ({ point, durationMinutesOffsetFromStartTime: '0' }))
+  const points = parseTimeline({ startTime: timestamp, timelinePath: samples })
+  const route = buildRouteSegments(points)
+  assert.ok(points.every(point => point.timestamp === timestamp))
+  assert.deepEqual(route.segments.map(segment => segment.points), [points])
+  assert.equal(route.segments[0]!.estimated, true)
+  assert.equal(route.distanceKm, distanceKm(points))
+  assert.equal(buildRouteSegments([points[0]!, points[2]!], points).distanceKm, 0)
+
+  const exact = parseTimeline({ startTime: timestamp, timelinePath: samples.map(point => ({ ...point, time: timestamp })) })
+  assert.equal(buildRouteSegments(exact).distanceKm, 0, 'explicit timestamps keep their original precision')
+  const independent = parseTimeline(samples.map(sample => ({ startTime: timestamp, timelinePath: [sample] })))
+  assert.equal(buildRouteSegments(independent).distanceKm, 0, 'sharing a minute across separate paths is insufficient')
+
+  const flightStart: TimelinePoint = { ...points[0]!, activities: [{ id: 'flight', mode: 'flight',
+    startTimestamp: timestamp, endTimestamp: '2026-10-13T10:30:00Z', distanceKm: 1200 }] }
+  assert.equal(buildRouteSegments([flightStart, ...points.slice(1)]).segments[0]!.transport, 'flight')
+})
+
+test('the distance budget covers the entire minute-offset run rather than each leg', () => {
+  const timelinePath = ['0,10', '0,10.017', '0,10.035'].map(point => ({ point, durationMinutesOffsetFromStartTime: 0 }))
+  const points = parseTimeline({ startTime: '2026-10-13T08:24:00Z', timelinePath })
+  assert.ok(distanceKm(points.slice(0, 2)) < 3 && distanceKm(points.slice(1)) < 3 && distanceKm(points) > 3)
+  assert.deepEqual(buildRouteSegments(points), { segments: [], distanceKm: 0 })
+})
+
 test('routes preserve the recorded anchors without inventing curved kinks', () => {
   const points = [
     point('a', 59.91, 10.70, '2025-01-01T10:00:00Z'),
