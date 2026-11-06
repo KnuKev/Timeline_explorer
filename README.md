@@ -17,7 +17,7 @@ Install **Node.js 24 with npm**, clone this repository or extract the ZIP, then 
 
 - **Map** shows routes for a day or date range. Dashed lines mark flights.
 - **Trips** groups domestic and international journeys with at least two nights away. The default home radius is 25 km. A recorded return home ends the trip.
-- **Places** ranks countries and cities by the number of days you were recorded there.
+- **Places** ranks countries and cities by the number of days you were recorded there. Click tiles to show all movement within the selected area.
 - **Statistics** shows monthly distance, a calendar coloured by distance, movement by time of day, and your most frequent routes between cities.
 
 ## Credits
