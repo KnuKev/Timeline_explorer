@@ -9,6 +9,10 @@ Explore your Google Timeline history on an interactive map in a desktop browser.
 
 Your file stays in browser memory and is never uploaded to GitHub. Refreshing the page clears it. OpenStreetMap receives map tile requests for the area you view.
 
+## Combine Timeline files
+
+Click the **Merge** icon to the left of the language selector, choose two Timeline JSON files, and download the combined file. The originals stay unchanged. Duplicate records are removed, missing data is filled from either file, and conflicting values are preserved. Open the downloaded JSON with **Map → Choose file**.
+
 ## Run locally
 
 Install **Node.js 24 with npm**, clone this repository or extract the ZIP, then run `npm ci` and `npm run dev` in the project folder. Open the local address printed in the terminal.
@@ -17,7 +21,7 @@ Install **Node.js 24 with npm**, clone this repository or extract the ZIP, then 
 
 - **Map** shows routes for a day or date range. Dashed lines mark flights.
 - **Trips** groups domestic and international journeys with at least two nights away. The default home radius is 25 km. A recorded return home ends the trip.
-- **Places** ranks countries and cities by the number of days you were recorded there.
+- **Places** ranks countries and cities by recorded days. Places with fewer than 10 points are in a collapsible section at the bottom.
 - **Statistics** shows monthly distance, a calendar coloured by distance, movement by time of day, and your most frequent routes between cities.
 
 ## Development

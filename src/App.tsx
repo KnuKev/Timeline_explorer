@@ -12,6 +12,7 @@ import TimelineMap from './TimelineMap'
 import { getMapColors } from './mapAppearance'
 import PointList from './PointList'
 import Icon from './Icon'
+import { mergeTranslations } from './mergeI18n'
 import { formatCalendarDate, formatPlaceDate, formatPointInterval, formatDistance } from './formatting'
 import './App.css'
 
@@ -20,6 +21,7 @@ type ActiveTab = 'map' | 'trips' | 'places' | 'statistics'
 type PlaceScope = { kind: 'country' | 'city'; name: string; key: string; countryName?: string; countryCode?: string }
 const Statistics = lazy(() => import('./Statistics.tsx'))
 const Trips = lazy(() => import('./Trips.tsx'))
+const MergeDialog = lazy(() => import('./MergeDialog.tsx'))
 
 // A fictional walk from the Louvre through the Tuileries gardens.
 const demoDate = '2025-06-07'
@@ -58,6 +60,7 @@ function App() {
   const pointsById = useMemo(() => new Map(importedPoints.map(point => [point.id, point])), [importedPoints])
   const suspectPointIds = useMemo(() => new Set(dataset.excluded.map(entry => entry.point.id)), [dataset])
   const [activeTab, setActiveTab] = useState<ActiveTab>('map')
+  const [mergeOpen, setMergeOpen] = useState(false)
   const [placeMode, setPlaceMode] = useState<'countries' | 'cities'>('countries')
   const [placesRequested, setPlacesRequested] = useState(false)
   const [statisticsRequested, setStatisticsRequested] = useState(false)
@@ -92,9 +95,8 @@ function App() {
     return ids.map(id => pointsById.get(id)).filter((point): point is TimelinePoint => Boolean(point))
   }, [tripScope, placeAnalysis, placeScope, placeViewEnabled, pointsById, visiblePoints])
   const places = placeMode === 'countries' ? placeAnalysis?.countries ?? [] : placeAnalysis?.cities ?? []
-  // A short drive can leave only a few points in a country; keep that country visible.
-  const mainPlaces = placeMode === 'countries' ? places : places.filter((place) => place.pointCount >= 10)
-  const fewerPlaces = placeMode === 'countries' ? [] : places.filter((place) => place.pointCount < 10)
+  const mainPlaces = places.filter((place) => place.pointCount >= 10)
+  const fewerPlaces = places.filter((place) => place.pointCount < 10)
   const placeName = (place: PlaceEntry) => placeMode === 'countries' ? countryName(place.countryCode, place.name) : place.name
   const scopeName = placeScope?.kind === 'country' ? countryName(placeScope.countryCode, placeScope.name) : placeScope?.name ?? ''
   const tripName = tripScope?.destination.kind === 'country' ? countryName(tripScope.destination.countryCode, tripScope.destination.name) : tripScope?.destination.name ?? ''
@@ -217,13 +219,16 @@ function App() {
         </nav>
 
         <div className="display-controls">
+          <button className="toolbar-button merge-toggle" type="button" title={mergeTranslations[language].title} aria-label={mergeTranslations[language].title} aria-haspopup="dialog" onClick={() => setMergeOpen(true)}><Icon name="merge" /></button>
           <div className="language-switch" role="group" aria-label={t.language}>
             <button type="button" lang="nb" aria-label="Norsk bokmål" aria-pressed={language === 'nb'} onClick={() => setLanguage('nb')}>NO</button>
             <button type="button" lang="en" aria-label="English" aria-pressed={language === 'en'} onClick={() => setLanguage('en')}>EN</button>
           </div>
-          <button className="theme-toggle" type="button" aria-label={isDark ? t.lightTheme : t.darkTheme} title={isDark ? t.lightTheme : t.darkTheme} onClick={() => setIsDark((current) => !current)}><Icon name={isDark ? 'sun' : 'moon'} /></button>
+          <button className="toolbar-button theme-toggle" type="button" aria-label={isDark ? t.lightTheme : t.darkTheme} title={isDark ? t.lightTheme : t.darkTheme} onClick={() => setIsDark((current) => !current)}><Icon name={isDark ? 'sun' : 'moon'} /></button>
         </div>
       </header>
+
+      {mergeOpen && <Suspense fallback={null}><MergeDialog language={language} onClose={() => setMergeOpen(false)} /></Suspense>}
 
       {activeTab === 'places' && (
         <div className="places-page">
@@ -241,8 +246,8 @@ function App() {
           {qualityNotice}
           {placesLoading && <div className="places-message"><span className="places-spinner" /> {t.analysing}</div>}{placesError && <div className="places-message places-error" role="alert">{t[placesError]}<button type="button" className="primary-button" onClick={retryPlaces}>{t.retry}</button></div>}
           {!placesLoading && !placesError && places.length === 0 && <div className="places-empty"><Icon name="globe" /><strong>{t.noPlaces}</strong><p>{t.importForPlaces}</p><button type="button" className="primary-button" onClick={() => setActiveTab('map')}>{t.goToMap}</button></div>}
-          {!placesLoading && mainPlaces.length > 0 && <div className="places-grid">{mainPlaces.map(renderPlaceCard)}</div>}
-          {!placesLoading && fewerPlaces.length > 0 && <details className="fewer-places"><summary><span>{t.fewerPlaces}</span><span className="count-badge">{fewerPlaces.length.toLocaleString(locale)}</span></summary><p>{t.fewerPlacesHint}</p><div className="places-grid">{fewerPlaces.map((place, index) => renderPlaceCard(place, mainPlaces.length + index))}</div></details>}
+          {!placesLoading && !placesError && mainPlaces.length > 0 && <div className="places-grid">{mainPlaces.map(renderPlaceCard)}</div>}
+          {!placesLoading && !placesError && fewerPlaces.length > 0 && <details key={placeMode} className="fewer-places"><summary><span>{placeMode === 'countries' ? t.fewerCountries : t.fewerPlaces}</span><span className="count-badge">{fewerPlaces.length.toLocaleString(locale)}</span></summary><p>{t.fewerPlacesHint}</p><div className="places-grid">{fewerPlaces.map((place, index) => renderPlaceCard(place, mainPlaces.length + index))}</div></details>}
           <footer className="places-attribution">{t.citySuggestions} <a href="https://www.geonames.org/" target="_blank" rel="noreferrer">GeoNames</a> (CC BY 4.0) · {t.geodataDetails}</footer>
         </div>
       )}
