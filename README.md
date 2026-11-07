@@ -1,6 +1,12 @@
 # Timeline Explorer
 
-Explore your Google Timeline history on an interactive map in a desktop browser.
+A Google Maps Timeline viewer for exploring your Google Location History on an interactive map. Import Timeline or Google Takeout JSON exports, view travel statistics, and merge exports locally in your desktop browser.
+
+[![Google Maps Timeline viewer showing the fictional London–Paris–Amsterdam–Oslo route](docs/images/timeline-map.png)](https://knukev.github.io/Timeline_explorer/)
+
+*Screenshots use the built-in fictional demo.*
+
+<!-- To replace these screenshots, see docs/SCREENSHOTS.md. -->
 
 ## Get started
 
@@ -25,6 +31,15 @@ Install **Node.js 24 with npm**, clone this repository or extract the ZIP, then 
 - **Trips** groups domestic and international journeys with at least two nights away. The default home radius is 25 km. A recorded return home ends the trip.
 - **Places** ranks countries and cities by recorded days. Click tiles to show movement in the selected area. Places with fewer than 10 points are in a collapsible section at the bottom.
 - **Statistics** shows monthly distance, a calendar coloured by distance, movement by time of day, recognised transport by distance or recorded travel time, and your most frequent routes between cities. **Under your own power** combines walking, running and cycling distance, compared with a lap around the Moon. These are estimates from recognised records; transport coverage is shown below the bars.
+
+<details>
+<summary>Preview statistics and trips</summary>
+
+![Travel statistics with monthly distance, a movement clock and a distance calendar](docs/images/statistics.png)
+
+![Trip detection showing the fictional international journey grouped by destination](docs/images/trips.png)
+
+</details>
 
 ## Credits
 
