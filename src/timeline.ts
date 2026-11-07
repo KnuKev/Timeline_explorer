@@ -1,5 +1,13 @@
 export type TransportMode = 'flight' | 'ferry' | 'rail' | 'road' | 'walking' | 'cycling'
-export type TimelineActivity = { id: string; mode: TransportMode; startTimestamp: string; endTimestamp: string; distanceKm: number }
+export type TimelineActivity = {
+  id: string; mode: TransportMode; startTimestamp: string; endTimestamp: string; distanceKm: number
+  // Keep Google's selected label and confidence for conservative statistics.
+  // Qualitative legacy confidence is not a calibrated numeric probability.
+  sourceType?: string
+  confidence?: number
+  confidenceUnavailable?: boolean
+  confidenceLevel?: 'low' | 'medium' | 'high'
+}
 
 export type TimelinePoint = {
   id: string
@@ -92,6 +100,48 @@ function transportMode(value: unknown): TransportMode | undefined {
   return undefined
 }
 
+function probability(value: unknown, scale: 1 | 100): number | undefined {
+  const number = finiteNumber(value)
+  return number !== null && number >= 0 && number <= scale ? number / scale : undefined
+}
+
+function confidenceLevel(value: unknown): TimelineActivity['confidenceLevel'] {
+  if (typeof value !== 'string') return undefined
+  const level = value.trim().toLowerCase()
+  return level === 'low' || level === 'medium' || level === 'high' ? level : undefined
+}
+
+function legacyConfidenceUnavailable(activity: UnknownRecord, candidate: UnknownRecord | null): boolean {
+  // The older mobile export uses a fixed zero for selected-type confidence
+  // while omitting activity.probability. Preserve the raw zero but distinguish
+  // this observed export representation from an explicit modern zero score.
+  // Unavailable confidence does not mean high confidence: consumers still
+  // validate the selected mode against timing, geometry and conflicting data.
+  return candidate?.probability === '0.000000'
+    && !Object.hasOwn(activity, 'probability')
+    && typeof candidate.type === 'string' && /^[a-z]+(?: [a-z]+)*$/.test(candidate.type)
+    && typeof activity.start === 'string' && activity.start.startsWith('geo:')
+    && typeof activity.end === 'string' && activity.end.startsWith('geo:')
+    && typeof activity.distanceMeters === 'string' && /^\d+\.\d{6}$/.test(activity.distanceMeters)
+    && Number.isFinite(Number(activity.distanceMeters))
+}
+
+function legacyProbability(activity: UnknownRecord): number | undefined {
+  if (typeof activity.activityType !== 'string' || !Array.isArray(activity.activities)) return undefined
+  const key = (type: string) => type.toLowerCase().replace(/[^a-z]/g, '')
+  const selected = key(activity.activityType)
+  let confidence: number | undefined
+  for (const value of activity.activities) {
+    const candidate = asRecord(value)
+    if (typeof candidate?.activityType !== 'string' || key(candidate.activityType) !== selected) continue
+    const valueConfidence = probability(candidate.probability, 100)
+    // Duplicate selected labels can occur in merged exports. Do not promote a
+    // conflicting low probability by retaining only its higher counterpart.
+    if (valueConfidence !== undefined) confidence = Math.min(confidence ?? valueConfidence, valueConfidence)
+  }
+  return confidence
+}
+
 function recordMinuteLinks(run: TimelinePoint[]) {
   if (run.length < 2) return
   const runDistanceKm = distanceKm(run)
@@ -133,14 +183,19 @@ export function parseTimeline(input: unknown): TimelinePoint[] {
     return point
   }
 
-  const addActivity = (start: unknown, end: unknown, from: string | null, to: string | null, modeValue: unknown, reportedMeters: unknown) => {
+  const addActivity = (start: unknown, end: unknown, from: string | null, to: string | null, modeValue: unknown, reportedMeters: unknown,
+    confidence?: number, level?: TimelineActivity['confidenceLevel'], confidenceUnavailable = false) => {
     const first = addPoint(start, from, 'path', 'Rutepunkt', 'activity')
     const last = addPoint(end, to, 'path', 'Rutepunkt', 'activity')
     const mode = transportMode(modeValue)
     if (!mode || !first || !last || !from || !to || to <= from) return
     const reported = finiteNumber(reportedMeters)
     const activity: TimelineActivity = { id: `activity-${activityCount++}`, mode, startTimestamp: from, endTimestamp: to,
-      distanceKm: Math.max(distanceKm([first, last]), reported !== null && reported >= 0 ? reported / 1000 : 0) }
+      distanceKm: Math.max(distanceKm([first, last]), reported !== null && reported >= 0 ? reported / 1000 : 0),
+      ...(typeof modeValue === 'string' ? { sourceType: modeValue } : {}),
+      ...(confidence === undefined ? {} : { confidence }),
+      ...(confidenceUnavailable && confidence === 0 ? { confidenceUnavailable: true } : {}),
+      ...(level === undefined ? {} : { confidenceLevel: level }) }
     // Older Google exports write probability zero even for the selected activity.
     // Retain that canonical mode; routes validate its timing before using it.
     for (const point of first === last ? [first] : [first, last]) (point.activities ??= []).push(activity)
@@ -192,7 +247,9 @@ export function parseTimeline(input: unknown): TimelinePoint[] {
     // Some days only contain activity endpoints, with no timelinePath at all.
     const activity = asRecord(record.activity)
     if (activity) {
-      addActivity(activity.start, activity.end, start, end, asRecord(activity.topCandidate)?.type ?? activity.activityType, activity.distanceMeters)
+      const candidate = asRecord(activity.topCandidate)
+      addActivity(activity.start, activity.end, start, end, candidate?.type ?? activity.activityType, activity.distanceMeters,
+        candidate?.type == null ? undefined : probability(candidate.probability, 1), undefined, legacyConfidenceUnavailable(activity, candidate))
     }
 
     // Older Takeout semantic history represents visits and journeys separately.
@@ -209,7 +266,8 @@ export function parseTimeline(input: unknown): TimelinePoint[] {
       const duration = asRecord(activitySegment.duration)
       const segmentStart = isoTime(duration?.startTimestamp) ?? millisecondsTime(duration?.startTimestampMs)
       const segmentEnd = isoTime(duration?.endTimestamp) ?? millisecondsTime(duration?.endTimestampMs)
-      addActivity(activitySegment.startLocation, activitySegment.endLocation, segmentStart, segmentEnd, activitySegment.activityType, activitySegment.distance)
+      addActivity(activitySegment.startLocation, activitySegment.endLocation, segmentStart, segmentEnd, activitySegment.activityType, activitySegment.distance,
+        legacyProbability(activitySegment), confidenceLevel(activitySegment.confidence))
     }
 
     // Records.json, timestamped simplifiedRawPath points, and Android raw positions.

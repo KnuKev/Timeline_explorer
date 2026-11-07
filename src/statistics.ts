@@ -1,6 +1,7 @@
 import tzLookup from 'tz-lookup'
 import { distanceKm, type TimelinePoint } from './timeline.ts'
 import { buildRouteSegments } from './routes.ts'
+import { buildTransportStatistics, type TransportTotal } from './transportStatistics.ts'
 import { pointDateKeys } from './pointDates.ts'
 import type { IndexedDay } from './timelineIndex.ts'
 import type { PlaceAnalysis, PlaceEntry } from './places.ts'
@@ -19,6 +20,7 @@ export type StatisticsPeriod = {
   monthly: StatisticsMonth[]
   daily: StatisticsDay[]
   hourlyMinutes: number[]
+  transport: TransportTotal[]
   countries: StatisticsPlace[]
   cities: StatisticsPlace[]
   newPlaces: StatisticsNewPlace[]
@@ -118,6 +120,8 @@ export function buildStatistics(points: TimelinePoint[], allPoints: TimelinePoin
   }
 
   const route = buildRouteSegments(points, allPoints)
+  const transport = buildTransportStatistics(points, allPoints, route)
+  for (const year of Object.keys(transport.byYear)) ensureYear(`${year.padStart(4, '0')}-01-01`)
   for (const segment of route.segments) {
     for (let index = 1; index < segment.points.length; index++) {
       const previous = segment.points[index - 1]!
@@ -209,7 +213,7 @@ export function buildStatistics(points: TimelinePoint[], allPoints: TimelinePoin
     const countries = placesForPeriod(places.countries, year)
     const cities = placesForPeriod(places.cities, year)
     return { distanceKm: total, recordedDays: daily.length, countryCount: countries.length, cityCount: cities.length, monthly, daily,
-      hourlyMinutes: builder.hourlyMinutes, countries, cities,
+      hourlyMinutes: builder.hourlyMinutes, transport: year ? transport.byYear[year] ?? [] : transport.all, countries, cities,
       newPlaces: year ? discoveries.filter(place => Number(place.date.slice(0, 4)) === Number(year)) : discoveries,
       patterns: [...builder.patterns.values()].filter(pattern => pattern.count >= 2).sort((a, b) => b.count - a.count || b.lastDate.localeCompare(a.lastDate) || a.key.localeCompare(b.key)).slice(0, 10) }
   }

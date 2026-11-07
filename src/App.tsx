@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
-import type { TimelinePoint } from './timeline'
+import { parseTimeline, type TimelinePoint } from './timeline'
+import { demoTimeline, demoStartDate, demoEndDate } from './demoTimeline'
 import type { PlaceEntry } from './places'
 import type { TimelineTrip } from './trips'
 import { getStoredHomeRadius, homeRadiusStorageKey, normalizeHomeRadius } from './tripSettings'
@@ -23,23 +24,7 @@ const Statistics = lazy(() => import('./Statistics.tsx'))
 const Trips = lazy(() => import('./Trips.tsx'))
 const MergeDialog = lazy(() => import('./MergeDialog.tsx'))
 
-// A fictional walk from the Louvre through the Tuileries gardens.
-const demoDate = '2025-06-07'
-function demoPoint(time: string, lat: number, lng: number): TimelinePoint {
-  return { id: `demo-${time}`, lat, lng, timestamp: `${demoDate}T${time}:00.000Z`, kind: 'path', label: 'Rutepunkt' }
-}
-const demoPoints = [
-  demoPoint('08:00', 48.8606, 2.3376),
-  demoPoint('08:03', 48.8612, 2.3350),
-  demoPoint('08:06', 48.8617, 2.3329),
-  demoPoint('08:10', 48.8625, 2.3304),
-  demoPoint('08:13', 48.8630, 2.3286),
-  demoPoint('08:17', 48.8637, 2.3264),
-  demoPoint('08:20', 48.8643, 2.3242),
-  demoPoint('08:24', 48.8651, 2.3224),
-  demoPoint('08:26', 48.8649, 2.3214),
-  demoPoint('08:30', 48.8656, 2.3195),
-]
+const demoTimelineUrl = new URL('./data/fictional-timeline.json', import.meta.url).href
 
 function App() {
   const [language, setLanguage] = useState<Language>(getStoredLanguage)
@@ -52,7 +37,7 @@ function App() {
     document.documentElement.lang = language
     try { localStorage.setItem(languageStorageKey, language) } catch { /* Language switching also works when storage is unavailable. */ }
   }, [language])
-  const [dataset, setDataset] = useState(() => prepareTimeline(demoPoints))
+  const [dataset, setDataset] = useState(() => prepareTimeline(parseTimeline(demoTimeline)))
   const importedPoints = dataset.points
   const [showSuspectPoints, setShowSuspectPoints] = useState(false)
   const [qualityDismissed, setQualityDismissed] = useState(false)
@@ -73,10 +58,10 @@ function App() {
   const [isDark, setIsDark] = useState(() => { try { return localStorage.getItem('timeline-explorer-dark') === 'true' } catch { return false } })
   const mapColors = getMapColors(isDark)
   const [isPointListExpanded, setIsPointListExpanded] = useState(false)
-  const [dateMode, setDateMode] = useState<DateMode>('day')
-  const [selectedDate, setSelectedDate] = useState(demoDate)
-  const [fromDate, setFromDate] = useState(demoDate)
-  const [toDate, setToDate] = useState(demoDate)
+  const [dateMode, setDateMode] = useState<DateMode>('period')
+  const [selectedDate, setSelectedDate] = useState(demoStartDate)
+  const [fromDate, setFromDate] = useState(demoStartDate)
+  const [toDate, setToDate] = useState(demoEndDate)
   const [fileName, setFileName] = useState('')
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null)
   const { data: placeAnalysis, statistics, trips, loading: placesLoading, statisticsLoading, tripsLoading, error: placesError, retry: retryPlaces } = usePlaces(dataset, showSuspectPoints, placesRequested, statisticsRequested, tripsRequested, homeRadiusKm)
@@ -279,6 +264,7 @@ function App() {
               />
             </label>
           </section>
+          {isDemo && <a className="sample-download" href={demoTimelineUrl} download="Timeline-example.json">{t.downloadSample}</a>}
           {importStage && <div className="import-progress" role="status" aria-live="polite"><span className="places-spinner" /><span>{t[importStage]}</span><button type="button" onClick={cancelImport}>{t.cancel}</button></div>}
           {error && <p className="error-message" role="alert">{t[error]}</p>}
           {qualityNotice}

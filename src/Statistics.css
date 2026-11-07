@@ -127,10 +127,10 @@
 .statistics-longest .ui-icon { width: 14px; height: 14px; }
 
 .statistics-rank { flex: 0 0 21px; color: var(--text-tertiary); font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.statistics-pattern-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; }
+.statistics-pattern-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(5, auto); grid-auto-flow: column; gap: 0 28px; }
 .statistics-pattern-list > .statistics-empty { grid-column: 1 / -1; }
 .statistics-pattern-row { display: flex; align-items: center; gap: 11px; min-height: 55px; padding: 8px 3px; border: 0; border-radius: 7px; background: transparent; text-align: left; cursor: pointer; }
-.statistics-pattern-row:nth-child(n+3) { border-top: 1px solid var(--border); border-radius: 0; }
+.statistics-pattern-row:nth-child(n+2):not(:nth-child(6)) { border-top: 1px solid var(--border); border-radius: 0; }
 .statistics-pattern-row:hover { background: var(--surface-muted); }
 .statistics-pattern-copy { display: flex; flex: 1; flex-direction: column; gap: 5px; min-width: 0; }
 .statistics-pattern-copy > strong { color: var(--text); font-size: 12px; line-height: 1.45; font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -139,6 +139,28 @@
 .statistics-pattern-count { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 .statistics-pattern-count strong { color: var(--text); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .statistics-pattern-count small { color: var(--text-tertiary); font-size: 9px; }
+
+.statistics-transport { grid-column: 1 / -1; }
+.statistics-transport-list { display: grid; gap: 18px; margin: 4px 0 22px; padding: 0; list-style: none; }
+.statistics-transport-row { display: grid; grid-template-columns: minmax(160px, 22%) minmax(0, 1fr) 112px; align-items: center; gap: 20px; --transport-color: var(--accent); }
+.statistics-transport-label { display: flex; align-items: center; gap: 11px; color: var(--text); font-size: 12px; font-weight: 500; }
+.statistics-transport-label .ui-icon { flex: 0 0 18px; width: 18px; height: 18px; color: var(--transport-color); }
+.statistics-transport-track { height: 12px; overflow: hidden; background: var(--surface-muted); border-radius: 4px; }
+.statistics-transport-track > span { display: block; height: 100%; border-radius: inherit; background: var(--transport-color); }
+.statistics-transport-value { display: flex; flex-direction: column; gap: 3px; text-align: right; font-variant-numeric: tabular-nums; }
+.statistics-transport-value strong { color: var(--text); font-size: 14px; font-weight: 500; }
+.transport-road { --transport-color: #257f91; }
+.transport-rail { --transport-color: #795ec0; }
+.dark .transport-road { --transport-color: #65afba; }
+.dark .transport-rail { --transport-color: #a68cdd; }
+.statistics-transport-details { margin-top: 10px; }
+.statistics-transport-details > summary { width: fit-content; color: var(--accent); font-size: 11px; cursor: pointer; }
+.statistics-transport-details .statistics-note { max-width: 760px; margin-top: 10px; }
+@media (max-width: 600px) {
+  .statistics-transport-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
+  .statistics-transport-track { grid-row: 2; grid-column: 1 / -1; }
+  .statistics-transport-value { grid-row: 1; grid-column: 2; }
+}
 
 .statistics-new-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
 .statistics-new-place { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: transparent; text-align: left; cursor: pointer; }
@@ -184,7 +206,7 @@
   .statistics-overview { grid-template-columns: 1.4fr 1fr; }
   .statistics-distance, .statistics-metric { min-height: 130px; }
   .statistics-monthly, .statistics-clock { grid-column: 1 / -1; }
-  .statistics-pattern-list { grid-template-columns: 1fr; }
+  .statistics-pattern-list { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-flow: row; }
   .statistics-pattern-row:nth-child(n+2) { border-top: 1px solid var(--border); border-radius: 0; }
   .statistics-clock-face { max-width: 260px; }
   .statistics-calendar-footer { align-items: flex-start; flex-direction: column; }

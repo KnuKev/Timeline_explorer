@@ -203,3 +203,15 @@ test('empty imports and malformed place dates return finite empty aggregates', (
   assert.equal(stats.all.monthly.length, 12)
   assert.deepEqual(stats.all.hourlyMinutes, Array(24).fill(0))
 })
+
+
+test('transport distances reconcile with the overview and yearly filters, including unknown ground records', () => {
+  const points = [point('a', '2024-12-31T22:50:00Z'), point('b', '2024-12-31T23:10:00Z', 59.93, 10.72)]
+  const stats = analyse(points)
+  for (const period of [stats.all, ...Object.values(stats.byYear)]) {
+    close(sum(period.transport.map(row => row.distanceKm)), period.distanceKm)
+  }
+  close(sum(Object.values(stats.byYear).flatMap(period => period.transport.map(row => row.minutes))), sum(stats.all.transport.map(row => row.minutes)))
+  assert.equal(stats.all.transport.find(row => row.category === 'unknown')!.minutes, 20)
+  assert.ok(stats.all.transport.find(row => row.category === 'unknown')!.distanceKm > 0)
+})

@@ -48,6 +48,47 @@ const Overview = memo(function Overview({ period, language, t }: PeriodProps) {
   </div>
 })
 
+const TransportChart = memo(function TransportChart({ period, language, t }: PeriodProps) {
+  const [unit, setUnit] = useState<'distance' | 'time'>('distance')
+  const locale = locales[language]
+  const categories = [
+    { category: 'flight', label: t.transportFlight, icon: 'plane' },
+    { category: 'road', label: t.transportRoad, icon: 'car' },
+    { category: 'rail', label: t.transportRail, icon: 'train' },
+  ] as const
+  const rows = categories.map(row => {
+    const entry = period.transport?.find(entry => entry.category === row.category)
+    return { ...row, value: Math.max(0, unit === 'distance' ? entry?.distanceKm ?? 0 : entry?.minutes ?? 0) }
+  })
+  const maximum = Math.max(0, ...rows.map(row => row.value))
+  const recognised = rows.reduce((sum, row) => sum + row.value, 0)
+  const other = period.transport?.find(entry => entry.category === 'unknown')
+  const unclassified = Math.max(0, unit === 'distance' ? other?.distanceKm ?? 0 : other?.minutes ?? 0)
+  const total = recognised + unclassified
+  const coverage = (total > 0 ? recognised / total : 0).toLocaleString(locale, { style: 'percent', maximumFractionDigits: 0 })
+  const format = (value: number) => unit === 'distance'
+    ? `${value.toLocaleString(locale, { maximumFractionDigits: 1 })} km`
+    : minutesLabel(value, locale, t)
+  return <article className="statistics-card statistics-transport">
+    <CardHeading title={t.transport} subtitle={unit === 'distance' ? t.transportDistance : t.transportTime}>
+      <div className="statistics-switch" role="group" aria-label={t.transportUnit}>
+        <button type="button" aria-pressed={unit === 'distance'} onClick={() => setUnit('distance')}>km</button>
+        <button type="button" aria-pressed={unit === 'time'} onClick={() => setUnit('time')}>{t.transportHours}</button>
+      </div>
+    </CardHeading>
+    <ul className="statistics-transport-list" aria-live="polite">
+      {rows.map(row => <li key={row.category} className={`statistics-transport-row transport-${row.category}`}>
+        <span className="statistics-transport-label"><Icon name={row.icon} />{row.label}</span>
+        <span className="statistics-transport-track" aria-hidden="true"><span style={{ width: `${maximum > 0 ? row.value / maximum * 100 : 0}%` }} /></span>
+        <span className="statistics-transport-value"><strong>{format(row.value)}</strong></span>
+      </li>)}
+    </ul>
+    {maximum === 0 && <p className="statistics-empty-text">{total > 0 ? t.transportNoRecognised : unit === 'distance' ? t.transportNoDistance : t.transportNoTime}</p>}
+    <p className="statistics-note statistics-transport-coverage" aria-live="polite">{(unit === 'distance' ? t.transportDistanceCoverage : t.transportTimeCoverage).replace('{share}', coverage).replace('{remaining}', format(unclassified))}</p>
+    <details className="statistics-transport-details"><summary>{t.transportDetails}</summary><p className="statistics-note">{unit === 'distance' ? t.transportDistanceHint : t.transportTimeHint}</p><p className="statistics-note">{t.transportHint}</p></details>
+  </article>
+})
+
 function MonthlyChart({ data, period, year, language, t, onOpenRange }: PeriodProps & { data: StatisticsAnalysis; year: number | null; onOpenRange: Props['onOpenRange'] }) {
   const [chosenMonth, setChosenMonth] = useState<number | null>(null)
   const locale = locales[language]
@@ -224,6 +265,7 @@ function StatisticsContent({ data, language, isDemo, onOpenRange }: Omit<Props, 
       <MonthlyChart data={data} period={period} year={year} language={language} t={t} onOpenRange={onOpenRange} />
       <MovementClock period={period} language={language} t={t} />
       {years.length > 0 && <Calendar period={period} year={year} years={years} language={language} t={t} onOpenRange={onOpenRange} />}
+      <TransportChart period={period} language={language} t={t} />
       <Patterns period={period} language={language} t={t} onOpenRange={onOpenRange} />
       <NewPlaces period={period} language={language} t={t} onOpenRange={onOpenRange} />
     </div>

@@ -1,6 +1,6 @@
 import type { ReactNode, SVGProps } from 'react'
 
-type IconName = 'map' | 'route' | 'globe' | 'chart' | 'upload' | 'shield' | 'pin' | 'sun' | 'moon' | 'close' | 'left' | 'right' | 'down' | 'plus' | 'minus' | 'fit' | 'arrow' | 'merge'
+type IconName = 'map' | 'route' | 'globe' | 'chart' | 'upload' | 'shield' | 'pin' | 'sun' | 'moon' | 'close' | 'left' | 'right' | 'down' | 'plus' | 'minus' | 'fit' | 'arrow' | 'merge' | 'plane' | 'car' | 'train' | 'question'
 const paths: Record<IconName, ReactNode> = {
   map: <><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2Z" /><path d="M9 3v16M15 5v16" /></>,
   route: <><circle cx="6" cy="5" r="2" /><circle cx="18" cy="19" r="2" /><path d="M8 5h7a4 4 0 0 1 0 8H9a3 3 0 0 0 0 6h7" /></>,
@@ -20,6 +20,10 @@ const paths: Record<IconName, ReactNode> = {
   fit: <><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" /><circle cx="12" cy="12" r="3" /></>,
   arrow: <path d="M5 12h14m-5-5 5 5-5 5" />,
   merge: <><path d="M5 20v-3c0-4 7-4 7-8V3m7 17v-3c0-4-7-4-7-8M8 7l4-4 4 4" /><circle cx="5" cy="21" r="1" /><circle cx="19" cy="21" r="1" /></>,
+  plane: <path d="M12 3a2 2 0 0 1 2 2v4l7 4v2l-7-2v5l2 2v1l-4-1-4 1v-1l2-2v-5l-7 2v-2l7-4V5a2 2 0 0 1 2-2Z" />,
+  car: <><path d="m5 9 2-5h10l2 5M4 16v3m16-3v3M3 9h18v7H3Z" /><path d="M6 12h2m8 0h2" /></>,
+  train: <><rect x="5" y="3" width="14" height="15" rx="3" /><path d="M5 10h14M12 3v7M8 18l-3 3m11-3 3 3M8 14h1m6 0h1" /></>,
+  question: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 1 1 4 2c-1 .6-1.5 1-1.5 2M12 16h.01" /></>,
 }
 
 /** Small, consistent interface icons; inherits the surrounding text colour. */
