@@ -21,6 +21,7 @@ export type StatisticsPeriod = {
   daily: StatisticsDay[]
   hourlyMinutes: number[]
   transport: TransportTotal[]
+  humanPoweredDistanceKm: number
   countries: StatisticsPlace[]
   cities: StatisticsPlace[]
   newPlaces: StatisticsNewPlace[]
@@ -213,7 +214,8 @@ export function buildStatistics(points: TimelinePoint[], allPoints: TimelinePoin
     const countries = placesForPeriod(places.countries, year)
     const cities = placesForPeriod(places.cities, year)
     return { distanceKm: total, recordedDays: daily.length, countryCount: countries.length, cityCount: cities.length, monthly, daily,
-      hourlyMinutes: builder.hourlyMinutes, transport: year ? transport.byYear[year] ?? [] : transport.all, countries, cities,
+      hourlyMinutes: builder.hourlyMinutes, transport: year ? transport.byYear[year] ?? [] : transport.all,
+      humanPoweredDistanceKm: year ? transport.humanPoweredByYear[year] ?? 0 : transport.humanPoweredDistanceKm, countries, cities,
       newPlaces: year ? discoveries.filter(place => Number(place.date.slice(0, 4)) === Number(year)) : discoveries,
       patterns: [...builder.patterns.values()].filter(pattern => pattern.count >= 2).sort((a, b) => b.count - a.count || b.lastDate.localeCompare(a.lastDate) || a.key.localeCompare(b.key)).slice(0, 10) }
   }

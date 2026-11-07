@@ -215,3 +215,20 @@ test('transport distances reconcile with the overview and yearly filters, includ
   assert.equal(stats.all.transport.find(row => row.category === 'unknown')!.minutes, 20)
   assert.ok(stats.all.transport.find(row => row.category === 'unknown')!.distanceKm > 0)
 })
+
+test('human-powered distance reaches each statistics period without increasing transport totals', () => {
+  const start = point('start', '2024-12-31T22:50:00Z')
+  const end = point('end', '2024-12-31T23:10:00Z', 59.93, 10.72)
+  const activity: TimelineActivity = { id: 'walk', mode: 'walking', sourceType: 'WALKING', confidence: 1, startTimestamp: start.timestamp, endTimestamp: end.timestamp, distanceKm: 3 }
+  start.activities = [activity]
+  end.activities = [activity]
+  const stats = analyse([start, end])
+  assert.ok(stats.all.humanPoweredDistanceKm > 2)
+  close(stats.all.humanPoweredDistanceKm, stats.all.distanceKm)
+  close(stats.byYear['2025']!.humanPoweredDistanceKm, stats.all.humanPoweredDistanceKm)
+  assert.equal(stats.byYear['2024']!.humanPoweredDistanceKm, 0)
+  for (const period of [stats.all, ...Object.values(stats.byYear)]) {
+    close(sum(period.transport.map(row => row.distanceKm)), period.distanceKm)
+  }
+  assert.equal(analyse([]).all.humanPoweredDistanceKm, 0)
+})

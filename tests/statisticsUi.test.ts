@@ -7,7 +7,7 @@ import type { StatisticsAnalysis, StatisticsPeriod } from '../src/statistics.ts'
 
 function fixture(): StatisticsAnalysis {
   const period: StatisticsPeriod = {
-    distanceKm: 325, recordedDays: 3, countryCount: 2, cityCount: 3,
+    distanceKm: 325, recordedDays: 3, countryCount: 2, cityCount: 3, humanPoweredDistanceKm: 5,
     monthly: Array.from({ length: 12 }, (_, index) => ({ month: index + 1, distanceKm: index === 1 ? 325 : 0, recordedDays: index === 1 ? 3 : 0 })),
     daily: [{ date: '2024-02-27', distanceKm: 0 }, { date: '2024-02-28', distanceKm: 25 }, { date: '2024-02-29', distanceKm: 300 }],
     hourlyMinutes: Array.from({ length: 24 }, (_, hour) => hour === 17 ? 120 : hour === 8 ? 30 : 0),
@@ -129,4 +129,40 @@ test('unclassified-only travel is still disclosed without claiming there was no 
   assert.match(html, /0% of estimated distance/)
   assert.match(html, /325 km is outside this breakdown/)
   assert.doesNotMatch(html, /No travel distance recorded|NaN|Infinity/)
+})
+
+test('human-powered comparison preserves small positive distances and translates the combined activity label', () => {
+  const html = render()
+  const card = html.match(/<article class="statistics-card statistics-human-powered [^"]+">([\s\S]*?)<\/article>/)?.[1]
+  assert.ok(card)
+  assert.match(card, /Walking, running and cycling/)
+  assert.match(card, /&lt;0\.01×/)
+  assert.match(card, /<strong>5 km<\/strong>/)
+  assert.match(card, /One lap ≈ 10,916 km/)
+  assert.match(card, /around the Moon/)
+  assert.match(card, /class="statistics-power-moon"/)
+  assert.doesNotMatch(card, /<select|<option|around Earth|around Mars/)
+  assert.ok(html.indexOf('statistics-calendar"') < html.indexOf('statistics-transport"'))
+  assert.ok(html.indexOf('statistics-transport"') < html.indexOf('statistics-human-powered'))
+  const nb = render(fixture(), 'nb')
+  assert.match(nb, /Egen kraft/)
+  assert.match(nb, /Gåing, løping og sykling/)
+  assert.match(nb, /&lt;0,01×/)
+})
+
+test('human-powered comparison distinguishes missing recognised activity and distances above a complete lap', () => {
+  const data = fixture()
+  data.all.humanPoweredDistanceKm = 0
+  const empty = render(data).match(/<article class="statistics-card statistics-human-powered [^"]+">([\s\S]*?)<\/article>/)?.[1]
+  assert.ok(empty)
+  assert.match(empty, /No such journeys were recognised/)
+  assert.match(empty, /stroke-dasharray="0 100"[^>]*style="opacity:0"/)
+  assert.match(empty, />0×<\/text>/)
+  assert.doesNotMatch(empty, /NaN|Infinity/)
+  data.all.humanPoweredDistanceKm = 1.5 * 2 * Math.PI * 1737.4
+  const complete = render(data).match(/<article class="statistics-card statistics-human-powered [^"]+">([\s\S]*?)<\/article>/)?.[1]
+  assert.ok(complete)
+  assert.match(complete, />1\.5×<\/text>/)
+  assert.match(complete, /stroke-dasharray="100 100"/)
+  assert.doesNotMatch(complete, /No such journeys were recognised|NaN|Infinity/)
 })

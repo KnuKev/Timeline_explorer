@@ -4,6 +4,7 @@ import { locales, type Language } from './i18n'
 import { formatCalendarDate, formatDistance, formatPlaceDate } from './formatting'
 import { statisticsTranslations } from './statisticsI18n'
 import Icon from './Icon'
+import MoonIllustration from './MoonIllustration'
 import './Statistics.css'
 
 type Props = {
@@ -17,6 +18,10 @@ type Props = {
 }
 type Copy = typeof statisticsTranslations.nb
 type PeriodProps = { period: StatisticsPeriod; language: Language; t: Copy }
+
+// Approximate lunar circumference from NASA/JPL's mean radius (2πr).
+// https://ssd.jpl.nasa.gov/sats/phys_par/
+const MOON_CIRCUMFERENCE_KM = 2 * Math.PI * 1737.4
 
 function monthRange(year: number, month: number): [string, string] {
   const first = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`
@@ -86,6 +91,30 @@ const TransportChart = memo(function TransportChart({ period, language, t }: Per
     {maximum === 0 && <p className="statistics-empty-text">{total > 0 ? t.transportNoRecognised : unit === 'distance' ? t.transportNoDistance : t.transportNoTime}</p>}
     <p className="statistics-note statistics-transport-coverage" aria-live="polite">{(unit === 'distance' ? t.transportDistanceCoverage : t.transportTimeCoverage).replace('{share}', coverage).replace('{remaining}', format(unclassified))}</p>
     <details className="statistics-transport-details"><summary>{t.transportDetails}</summary><p className="statistics-note">{unit === 'distance' ? t.transportDistanceHint : t.transportTimeHint}</p><p className="statistics-note">{t.transportHint}</p></details>
+  </article>
+})
+
+const HumanPowered = memo(function HumanPowered({ period, language, t }: PeriodProps) {
+  const locale = locales[language]
+  const distance = Number.isFinite(period.humanPoweredDistanceKm) ? Math.max(0, period.humanPoweredDistanceKm) : 0
+  const laps = distance / MOON_CIRCUMFERENCE_KM
+  const ratio = laps > 0 && laps < 0.01 ? `<${(0.01).toLocaleString(locale)}` : laps.toLocaleString(locale, { maximumFractionDigits: 2, ...(laps >= 1000 ? { notation: 'compact' as const } : {}) })
+  const distanceLabel = formatDistance(distance, locale)
+  const circumferenceLabel = `${MOON_CIRCUMFERENCE_KM.toLocaleString(locale, { maximumFractionDigits: 0 })} km`
+  const progress = Math.min(1, laps) * 100
+  return <article className="statistics-card statistics-human-powered comparison-moon">
+    <CardHeading title={t.humanPowered} subtitle={t.humanPoweredIntro} />
+    <svg className="statistics-power-ring" viewBox="0 0 260 220" role="img" aria-label={`${distanceLabel}. ${ratio}× ${t.powerAroundMoon}. ${t.powerOneLap.replace('{distance}', circumferenceLabel)}`}>
+      <circle className="statistics-power-track" cx="130" cy="110" r="94" />
+      <circle className="statistics-power-progress" cx="130" cy="110" r="94" pathLength="100" strokeDasharray={`${progress} 100`} transform="rotate(-90 130 110)" style={{ opacity: progress > 0 ? 1 : 0 }} />
+      <MoonIllustration />
+      <text className="statistics-power-ratio" x="130" y="150" textAnchor="middle">{ratio}×</text>
+      <text className="statistics-power-body" x="130" y="172" textAnchor="middle">{t.powerAroundMoon}</text>
+    </svg>
+    <div className="statistics-power-distance"><strong>{distanceLabel}</strong><span>{t.powerRecorded}</span></div>
+    {distance === 0 && <p className="statistics-note statistics-power-empty">{t.powerEmpty}</p>}
+    <p className="statistics-power-circumference">{t.powerOneLap.replace('{distance}', circumferenceLabel)}</p>
+    <details className="statistics-power-details"><summary>{t.powerDetails}</summary><p className="statistics-note">{t.powerHint}</p><p className="statistics-note">{t.powerComparisonHint} <a href="https://ssd.jpl.nasa.gov/sats/phys_par/" target="_blank" rel="noreferrer">NASA/JPL</a>.</p></details>
   </article>
 })
 
@@ -266,6 +295,7 @@ function StatisticsContent({ data, language, isDemo, onOpenRange }: Omit<Props, 
       <MovementClock period={period} language={language} t={t} />
       {years.length > 0 && <Calendar period={period} year={year} years={years} language={language} t={t} onOpenRange={onOpenRange} />}
       <TransportChart period={period} language={language} t={t} />
+      <HumanPowered period={period} language={language} t={t} />
       <Patterns period={period} language={language} t={t} onOpenRange={onOpenRange} />
       <NewPlaces period={period} language={language} t={t} onOpenRange={onOpenRange} />
     </div>

@@ -5,7 +5,12 @@ import { distanceKm, type TimelineActivity, type TimelinePoint, type TransportMo
 
 export type TransportCategory = 'flight' | 'road' | 'rail' | 'unknown'
 export type TransportTotal = { category: TransportCategory; distanceKm: number; minutes: number }
-export type TransportStatistics = { all: TransportTotal[]; byYear: Record<string, TransportTotal[]> }
+export type TransportStatistics = {
+  all: TransportTotal[]
+  byYear: Record<string, TransportTotal[]>
+  humanPoweredDistanceKm: number
+  humanPoweredByYear: Record<string, number>
+}
 
 const CATEGORIES: TransportCategory[] = ['flight', 'road', 'rail', 'unknown']
 const HOUR_MS = 3_600_000
@@ -13,16 +18,20 @@ const MAX_OBSERVED_GAP_MS = 30 * 60_000
 const SPEED_LIMITS: Record<TransportMode, number> = { flight: 1500, road: 220, rail: 360, walking: 25, cycling: 80, ferry: 120 }
 const empty = (): TransportTotal[] => CATEGORIES.map(category => ({ category, distanceKm: 0, minutes: 0 }))
 type Evidence = { activity: TimelineActivity; start: number; end: number; selectedStart: boolean; selectedEnd: boolean }
-type SpanEvidence = { category: TransportCategory; speedLimit: number; timed: boolean; missingAnchor: boolean; impossible: boolean }
+type SpanEvidence = { category: TransportCategory; humanPowered: boolean; speedLimit: number; timed: boolean; missingAnchor: boolean; impossible: boolean }
 type Span = { start: number; end: number; groups: SpanEvidence[] }
 type Slice = { start: number; end: number; evidence?: Span }
 
-function categoryOf(activity: TimelineActivity): TransportCategory {
+function hasUsableConfidence(activity: TimelineActivity): boolean {
   // Only the importer's exact legacy-format sentinel means an unavailable
   // score; a genuine zero or any other low score must remain unclassified.
   const unavailableZero = activity.confidenceUnavailable === true && activity.confidence === 0
-  if (!unavailableZero && activity.confidence !== undefined && (!Number.isFinite(activity.confidence) || activity.confidence < 0.7 || activity.confidence > 1)) return 'unknown'
-  if (activity.confidenceLevel && activity.confidenceLevel !== 'high') return 'unknown'
+  if (!unavailableZero && activity.confidence !== undefined && (!Number.isFinite(activity.confidence) || activity.confidence < 0.7 || activity.confidence > 1)) return false
+  return !activity.confidenceLevel || activity.confidenceLevel === 'high'
+}
+
+function categoryOf(activity: TimelineActivity): TransportCategory {
+  if (!hasUsableConfidence(activity)) return 'unknown'
   // The route parser's broad road category also contains motorcycles. They
   // should not appear under the narrower car/bus label used by this report.
   if (/motorcycl/i.test(activity.sourceType ?? '')) return 'unknown'
@@ -63,10 +72,11 @@ function activitySpans(points: TimelinePoint[], allPoints: TimelinePoint[]): Spa
     const missingAnchor = !entry.selectedStart || !entry.selectedEnd
     const supported = !missingAnchor && plausible
     const category = supported ? categoryOf(activity) : 'unknown'
+    const humanPowered = supported && hasUsableConfidence(activity) && (activity.mode === 'walking' || activity.mode === 'cycling')
     // The duration can remain meaningful when the mode confidence is low.
     // A stationary record or a rejected/missing activity anchor cannot supply it.
     const timed = supported && activity.distanceKm >= 0.03
-    const group = { category, timed, speedLimit, missingAnchor, impossible: !plausible }
+    const group = { category, humanPowered, timed, speedLimit, missingAnchor, impossible: !plausible }
     const key = JSON.stringify(group)
     events.push({ time: start, delta: 1, key, group }, { time: end, delta: -1, key, group })
   }
@@ -98,6 +108,14 @@ function spanCategory(span: Span, speed: number): TransportCategory {
   if (!candidates.length) return 'unknown'
   const category = candidates[0]!.category
   return candidates.every(group => group.category === category) ? category : 'unknown'
+}
+
+function spanIsHumanPowered(span: Span, speed: number): boolean {
+  if (span.groups.some(group => group.missingAnchor)) return false
+  const candidates = span.groups.filter(group => !group.impossible && speed <= group.speedLimit)
+  // Walking/running/cycling disagreements still support movement under your
+  // own power. Plausible motorised or low-confidence alternatives do not.
+  return candidates.length > 0 && candidates.every(group => group.humanPowered)
 }
 
 function firstSpan(spans: Span[], time: number): number {
@@ -132,6 +150,12 @@ function slicesBetween(spans: Span[], start: number, end: number): Slice[] {
 export function buildTransportStatistics(points: TimelinePoint[], allPoints: TimelinePoint[] = points, route: RouteAnalysis = buildRouteSegments(points, allPoints)): TransportStatistics {
   const all = empty()
   const byYear: Record<string, TransportTotal[]> = {}
+  let humanPoweredDistanceKm = 0
+  const humanPoweredByYear: Record<string, number> = {}
+  const addHumanPoweredDistance = (kilometers: number, year: string) => {
+    humanPoweredDistanceKm += kilometers
+    humanPoweredByYear[year] = (humanPoweredByYear[year] ?? 0) + kilometers
+  }
   const ensureYear = (year: string) => byYear[year] ??= empty()
   const addDistance = (category: TransportCategory, kilometers: number, year: string) => {
     const index = CATEGORIES.indexOf(category)
@@ -209,6 +233,12 @@ export function buildTransportStatistics(points: TimelinePoint[], allPoints: Tim
         const evidence = spans[firstSpan(spans, start)]
         const category = evidence && evidence.start <= start ? spanCategory(evidence, 0) : fallback
         addDistance(category, kilometers, year)
+        // Whole-minute offsets can hide up to one minute of movement, not an
+        // unlimited journey. Check the complete rounded run: several short
+        // legs can together be too fast for walking or cycling.
+        const minuteLink = current.minutePathLink
+        const minuteDistance = minuteLink?.previousId === previous.id ? Math.max(kilometers, minuteLink.runDistanceKm) : kilometers
+        if (evidence && evidence.start <= start && spanIsHumanPowered(evidence, minuteDistance * 60)) addHumanPoweredDistance(kilometers, year)
         continue
       }
       if (!Number.isFinite(elapsed) || elapsed < 0) { addDistance('unknown', kilometers, year); continue }
@@ -221,6 +251,12 @@ export function buildTransportStatistics(points: TimelinePoint[], allPoints: Tim
       // Real activity boundaries normally provide their own route endpoints.
       const category = categories.size === 1 ? [...categories][0]! : 'unknown'
       addDistance(category, kilometers, year)
+      // This is a separate view of the same geometry: it stays in the existing
+      // unknown transport bucket. Do not infer a human mode from speed alone or
+      // apportion sparse edges that cross unsupported or motorised intervals.
+      if (slices.length > 0 && slices.every(slice => slice.evidence && spanIsHumanPowered(slice.evidence, speed))) {
+        addHumanPoweredDistance(kilometers, year)
+      }
       const observed = !segment.estimated && elapsed <= MAX_OBSERVED_GAP_MS && kilometers >= 0.03 && speed >= 1
       for (const slice of slices) {
         const supportedDuration = slice.evidence?.groups.some(group => group.timed && speed <= group.speedLimit)
@@ -228,5 +264,5 @@ export function buildTransportStatistics(points: TimelinePoint[], allPoints: Tim
       }
     }
   }
-  return { all, byYear }
+  return { all, byYear, humanPoweredDistanceKm, humanPoweredByYear }
 }

@@ -317,3 +317,126 @@ test('flight time can introduce a local year not present in either endpoint date
   near(old.minutes, 10)
   near(current.minutes, 10)
 })
+
+test('human-powered distance combines recorded walking, running and cycling without changing transport totals', () => {
+  for (const [mode, sourceType] of [['walking', 'WALKING'], ['walking', 'RUNNING'], ['walking', 'ON_FOOT'], ['cycling', 'ON_BICYCLE']] as const) {
+    const points = [point('a', '2025-05-01T10:00:00Z'), point('b', '2025-05-01T11:00:00Z', 59.94, 10.7)]
+    attach(points, mode, 0, 1, { sourceType, confidence: 0.99 })
+    const stats = buildTransportStatistics(points)
+    near(stats.humanPoweredDistanceKm, distanceKm(points))
+    near(stats.humanPoweredByYear['2025']!, stats.humanPoweredDistanceKm)
+    assert.deepEqual(stats.all, [
+      { category: 'flight', distanceKm: 0, minutes: 0 },
+      { category: 'road', distanceKm: 0, minutes: 0 },
+      { category: 'rail', distanceKm: 0, minutes: 0 },
+      { category: 'unknown', distanceKm: distanceKm(points), minutes: 60 },
+    ])
+    assert.deepEqual(stats.byYear['2025'], stats.all)
+  }
+})
+
+test('overlapping human-powered labels and duplicate merged records count each route edge once', () => {
+  const points = [point('a', '2025-05-01T10:00:00Z'), point('b', '2025-05-01T10:30:00Z', 59.92, 10.7), point('c', '2025-05-01T11:00:00Z', 59.94, 10.7)]
+  const walking = attach(points, 'walking', 0, 2, { sourceType: 'WALKING' })
+  attach(points, 'walking', 0, 2, { sourceType: 'RUNNING' })
+  attach(points, 'cycling', 1, 2, { sourceType: 'ON_BICYCLE' })
+  points[0]!.activities!.push({ ...walking, id: 'duplicate-export' })
+  points[2]!.activities!.push({ ...walking, id: 'duplicate-export' })
+  const original = structuredClone(points)
+  const stats = buildTransportStatistics(points)
+  near(stats.humanPoweredDistanceKm, distanceKm(points))
+  near(row(stats, 'unknown').distanceKm, distanceKm(points))
+  near(row(stats, 'unknown').minutes, 60)
+  assert.deepEqual(points, original)
+})
+
+test('human-powered distance requires accepted mode confidence, including the narrow legacy sentinel', () => {
+  for (const extra of [{}, { confidence: 0.7 }, { confidence: 0, confidenceUnavailable: true }]) {
+    const points = [point('a', '2025-05-01T10:00:00Z'), point('b', '2025-05-01T11:00:00Z', 59.94, 10.7)]
+    attach(points, 'walking', 0, 1, extra)
+    near(buildTransportStatistics(points).humanPoweredDistanceKm, distanceKm(points))
+  }
+  for (const extra of [{ confidence: 0 }, { confidence: 0.69 }, { confidence: 2 }, { confidence: NaN }, { confidenceLevel: 'low' as const }, { confidenceLevel: 'medium' as const }, { confidence: 0.2, confidenceUnavailable: true }]) {
+    const points = [point('a', '2025-05-01T10:00:00Z'), point('b', '2025-05-01T11:00:00Z', 59.94, 10.7)]
+    attach(points, 'walking', 0, 1, extra)
+    const stats = buildTransportStatistics(points)
+    near(stats.humanPoweredDistanceKm, 0)
+    near(row(stats, 'unknown').minutes, 60)
+    attach(points, 'cycling', 0, 1, { confidence: 0.99 })
+    assert.equal(buildTransportStatistics(points).humanPoweredDistanceKm, 0, 'A plausible low-confidence alternative remains uncertain')
+  }
+})
+
+test('slow GPS movement and nonhuman other modes cannot become human-powered distance', () => {
+  for (const mode of [undefined, 'ferry', 'road', 'rail', 'flight'] as const) {
+    const points = [point('a', '2025-05-01T10:00:00Z'), point('b', '2025-05-01T10:20:00Z', 59.92, 10.7)]
+    if (mode) attach(points, mode, 0, 1, { sourceType: mode === 'road' ? 'MOTORCYCLING' : mode })
+    near(buildTransportStatistics(points).humanPoweredDistanceKm, 0)
+    if (mode) {
+      attach(points, 'walking')
+      near(buildTransportStatistics(points).humanPoweredDistanceKm, 0)
+    }
+  }
+})
+
+test('human-powered distance requires both selected anchors and plausible activity and edge speeds', () => {
+  const points = [point('a', '2025-05-01T10:00:00Z'), point('b', '2025-05-01T10:01:00Z', 59.92, 10.7), point('c', '2025-05-01T11:00:00Z', 59.94, 10.7)]
+  const activity = attach(points, 'walking')
+  const stats = buildTransportStatistics(points)
+  near(stats.humanPoweredDistanceKm, distanceKm(points.slice(1)))
+  near(buildTransportStatistics(points.slice(0, 2), points).humanPoweredDistanceKm, 0)
+  activity.distanceKm = 1000
+  near(buildTransportStatistics(points).humanPoweredDistanceKm, 0)
+  activity.mode = 'cycling'
+  activity.distanceKm = distanceKm(points)
+  near(buildTransportStatistics(points).humanPoweredDistanceKm, distanceKm(points))
+})
+
+test('sparse edges count only when their whole interval has human-powered support', () => {
+  for (const secondMode of [undefined, 'walking', 'cycling', 'road'] as const) {
+    const points = [point('a', '2025-05-01T10:00:00Z'), point('b', '2025-05-01T10:30:00Z', 59.92, 10.7), point('c', '2025-05-01T11:00:00Z', 59.94, 10.7)]
+    attach(points, 'walking', 0, 1)
+    if (secondMode) attach(points, secondMode, 1, 2)
+    const route = { segments: [{ id: 'sparse', points: [points[0]!, points[2]!] }], distanceKm: distanceKm([points[0]!, points[2]!]) }
+    const stats = buildTransportStatistics(points, points, route)
+    near(stats.humanPoweredDistanceKm, secondMode === 'walking' || secondMode === 'cycling' ? route.distanceKm : 0)
+    near(sum(stats, 'distanceKm'), route.distanceKm)
+  }
+})
+
+test('human-powered distance uses arrival-local years and yearly totals sum to all time', () => {
+  const points = [point('a', '2024-12-31T22:30:00Z'), point('b', '2024-12-31T22:50:00Z', 59.92, 10.7), point('c', '2024-12-31T23:10:00Z', 59.94, 10.7)]
+  attach(points, 'walking')
+  const stats = buildTransportStatistics(points)
+  near(stats.humanPoweredByYear['2024']!, distanceKm(points.slice(0, 2)))
+  near(stats.humanPoweredByYear['2025']!, distanceKm(points.slice(1)))
+  near(Object.values(stats.humanPoweredByYear).reduce((total, kilometers) => total + kilometers, 0), stats.humanPoweredDistanceKm)
+  near(stats.humanPoweredDistanceKm, sum(stats, 'distanceKm'))
+})
+
+test('parsed rounded-minute geometry needs a plausible complete human-powered run', () => {
+  for (const [mode, minuteLatitudes, countsMinute] of [
+    ['WALKING', [59.91, 59.912], true],
+    ['WALKING', [59.91, 59.925], false],
+    ['WALKING', [59.91, 59.912, 59.914, 59.916], false],
+    ['CYCLING', [59.91, 59.919], true],
+    ['CYCLING', [59.91, 59.925], false],
+  ] as const) {
+    const points = parseTimeline({
+      startTime: '2025-05-01T10:00:00Z', endTime: '2025-05-01T11:00:00Z',
+      activity: { start: '59.91,10.7', end: '59.93,10.7', distanceMeters: 2300, topCandidate: { type: mode, probability: 0.99 } },
+      timelinePath: [
+        ...minuteLatitudes.map(lat => ({ point: `${lat},10.7`, durationMinutesOffsetFromStartTime: 0 })),
+        { point: '59.93,10.7', durationMinutesOffsetFromStartTime: 60 },
+      ],
+    })
+    const route = buildRouteSegments(points)
+    const rounded = route.segments.filter(segment => segment.estimated)
+    assert.equal(rounded.length, 1, 'The fixture must actually draw its rounded-minute run')
+    near(distanceKm(rounded[0]!.points), distanceKm(points.slice(0, -1)))
+    const stats = buildTransportStatistics(points, points, route)
+    near(stats.humanPoweredDistanceKm, countsMinute ? route.distanceKm : distanceKm(points.slice(-2)))
+    near(row(stats, 'unknown').distanceKm, route.distanceKm)
+    near(row(stats, 'unknown').minutes, 60)
+  }
+})
