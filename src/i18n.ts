@@ -4,9 +4,9 @@ export const languageStorageKey = 'timeline-explorer-language'
 
 export function getStoredLanguage(): Language {
   try {
-    return localStorage.getItem(languageStorageKey) === 'en' ? 'en' : 'nb'
+    return localStorage.getItem(languageStorageKey) === 'nb' ? 'nb' : 'en'
   } catch {
-    return 'nb'
+    return 'en'
   }
 }
 
