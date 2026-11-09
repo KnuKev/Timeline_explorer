@@ -4,8 +4,6 @@ A Google Maps Timeline viewer for exploring your Google Location History on an i
 
 [![Google Maps Timeline viewer showing some of my personal data across europe over the last 10 years](docs/images/timeline-map.png)](https://knukev.github.io/Timeline_explorer/)
 
-*Screenshots use the built-in fictional demo.*
-
 <!-- To replace these screenshots, see docs/SCREENSHOTS.md. -->
 
 ## Get started
