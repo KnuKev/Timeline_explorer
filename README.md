@@ -36,15 +36,18 @@ Install **Node.js 24 with npm**, clone this repository or extract the ZIP, then 
 Below are previews of the main views in Timeline Explorer:
 
 ### Interactive Map View
+
 Filter travel history by custom date ranges, view location quality, and trace flight routes (dashed lines) alongside ground travel.
 ![Map view showing over 278,000 km of travel across the world in the last 10 years](docs/images/timeline-map1.png)
 
 ### Trip Detection
+
 Automatically detects completed domestic and international trips with at least two nights away from home. Cards group journeys by country and display multi-stop itineraries.
 ![Trips overview showing international trips, countries and nights away](docs/images/trips.png)
 
-### Travel Statistics - Activity, Monthly Overview, Acitivty Calendar and Transport
-Visualise total recorded distance, monthly travel patterns, time-of-day activity levels, daily distance intensity across the calendar year, transport mode breakdowns with distance, human-powered travel distance compared against a lap around the Moon, and your most travelled routes.
+### Travel Statistics - Total Stats, Monthly Overview, Activity Calendar and Transport Stats
+
+Visualize total recorded distance, monthly travel patterns, time-of-day activity levels, daily distance intensity across the calendar year, transport mode breakdowns with distance, human-powered travel distance compared against a lap around the Moon, and your most traveled routes.
 ![Statistics view showing total distance, monthly bar charts, and daily movement clock](docs/images/statistics1.png)
 ![Statistics breakdown with distance calendar, transport types, and human-powered distance comparison](docs/images/statistics2.png)
 
