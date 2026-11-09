@@ -2,7 +2,7 @@
 
 A Google Maps Timeline viewer for exploring your Google Location History on an interactive map. Import Timeline or Google Takeout JSON exports, view travel statistics, and merge exports locally in your desktop browser.
 
-[![Google Maps Timeline viewer showing the fictional London–Paris–Amsterdam–Oslo route](docs/images/timeline-map.png)](https://knukev.github.io/Timeline_explorer/)
+[![Google Maps Timeline viewer showing some of my personal data across europe over the last 10 years](docs/images/timeline-map.png)](https://knukev.github.io/Timeline_explorer/)
 
 *Screenshots use the built-in fictional demo.*
 
@@ -32,14 +32,23 @@ Install **Node.js 24 with npm**, clone this repository or extract the ZIP, then 
 - **Places** ranks countries and cities by recorded days. Click tiles to show movement in the selected area. Places with fewer than 10 points are in a collapsible section at the bottom.
 - **Statistics** shows monthly distance, a calendar coloured by distance, movement by time of day, recognised transport by distance or recorded travel time, and your most frequent routes between cities. **Under your own power** combines walking, running and cycling distance, compared with a lap around the Moon. These are estimates from recognised records; transport coverage is shown below the bars.
 
-<details>
-<summary>Preview statistics and trips</summary>
 
-![Travel statistics with monthly distance, a movement clock and a distance calendar](docs/images/statistics.png)
+## Screenshots & Feature Highlights
 
-![Trip detection showing the fictional international journey grouped by destination](docs/images/trips.png)
+Below are previews of the main views in Timeline Explorer:
 
-</details>
+### Interactive Map View
+Filter travel history by custom date ranges, view location quality, and trace flight routes (dashed lines) alongside ground travel.
+![Map view showing over 278,000 km of travel across the world in the last 10 years](docs/images/timeline-map1.jpg)
+
+### Trip Detection
+Automatically detects completed domestic and international trips with at least two nights away from home. Cards group journeys by country and display multi-stop itineraries.
+![Trips overview showing international trips, countries and nights away](docs/images/trips.jpg)
+
+### Travel Statistics - Activity, Monthly Overview, Acitivty Calendar and Transport
+Visualise total recorded distance, monthly travel patterns, time-of-day activity levels, daily distance intensity across the calendar year, transport mode breakdowns with distance, human-powered travel distance compared against a lap around the Moon, and your most travelled routes.
+![Statistics view showing total distance, monthly bar charts, and daily movement clock](docs/images/statistics1.jpg)
+![Statistics breakdown with distance calendar, transport types, and human-powered distance comparison](docs/images/statistics2.jpg)
 
 ## Credits
 
