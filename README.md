@@ -37,16 +37,16 @@ Below are previews of the main views in Timeline Explorer:
 
 ### Interactive Map View
 Filter travel history by custom date ranges, view location quality, and trace flight routes (dashed lines) alongside ground travel.
-![Map view showing over 278,000 km of travel across the world in the last 10 years](docs/images/timeline-map1.jpg)
+![Map view showing over 278,000 km of travel across the world in the last 10 years](docs/images/timeline-map1.ppg)
 
 ### Trip Detection
 Automatically detects completed domestic and international trips with at least two nights away from home. Cards group journeys by country and display multi-stop itineraries.
-![Trips overview showing international trips, countries and nights away](docs/images/trips.jpg)
+![Trips overview showing international trips, countries and nights away](docs/images/trips.ppg)
 
 ### Travel Statistics - Activity, Monthly Overview, Acitivty Calendar and Transport
 Visualise total recorded distance, monthly travel patterns, time-of-day activity levels, daily distance intensity across the calendar year, transport mode breakdowns with distance, human-powered travel distance compared against a lap around the Moon, and your most travelled routes.
-![Statistics view showing total distance, monthly bar charts, and daily movement clock](docs/images/statistics1.jpg)
-![Statistics breakdown with distance calendar, transport types, and human-powered distance comparison](docs/images/statistics2.jpg)
+![Statistics view showing total distance, monthly bar charts, and daily movement clock](docs/images/statistics1.ppg)
+![Statistics breakdown with distance calendar, transport types, and human-powered distance comparison](docs/images/statistics2.ppg)
 
 ## Credits
 
