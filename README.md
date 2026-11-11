@@ -11,8 +11,6 @@ A Google Maps Timeline viewer for exploring your Google Location History on an i
 1. Open [Timeline Explorer](https://knukev.github.io/Timeline_explorer/) and try the fictional London–Paris–Amsterdam–Oslo–London journey. No installation or account is needed.
 2. To explore your own history, open **Map → Choose file** and select a Google Timeline JSON export. Mobile Timeline exports and older Takeout files such as `Records.json` are supported. Unzip archived exports first.
 
-The example includes a month of daily home records, then a 29 April–3 May 2025 journey with an approximate London marathon route, public transport, three flights and a road trip, ending back home. Use **Download sample JSON** to get it in Timeline export format.
-
 Your file stays in browser memory and is never uploaded to GitHub. Refreshing the page clears it. OpenStreetMap receives map tile requests for the area you view.
 
 ## Combine Timeline files
