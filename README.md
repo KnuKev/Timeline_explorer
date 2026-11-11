@@ -45,6 +45,11 @@ Filter travel history by custom date ranges, view location quality, and trace fl
 Automatically detects completed domestic and international trips with at least two nights away from home. Cards group journeys by country and display multi-stop itineraries.
 ![Trips overview showing international trips, countries and nights away](docs/images/trips.png)
 
+### Places & Location Ranks
+
+Rank and explore visited countries, regions, and cities sorted by total days spent. Filter or click any location tile to highlight recorded movements in that specific area.
+![Places view showing visited countries and cities ranked by days spent](docs/images/places.png)
+
 ### Travel Statistics - Total Stats, Monthly Overview, Activity Calendar and Transport Stats
 
 Visualize total recorded distance, monthly travel patterns, time-of-day activity levels, daily distance intensity across the calendar year, transport mode breakdowns with distance, human-powered travel distance compared against a lap around the Moon, and your most traveled routes.
