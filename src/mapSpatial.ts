@@ -12,6 +12,27 @@ export function projectLocation(lat: number, lng: number): WorldPoint {
   return { x: (lng + 180) / 360, y: 0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI) }
 }
 
+export function longitudeNear(longitude: number, reference: number): number {
+  const difference = reference - longitude
+  return Math.abs(difference) <= 180 ? longitude : longitude + 360 * Math.round(difference / 360)
+}
+
+export function shortestLongitudeRange(points: readonly Pick<TimelinePoint, 'lng'>[], west: number, east: number): [number, number] {
+  if (east - west <= 180) return [west, east]
+  const sorted = points.map(point => point.lng).sort((a, b) => a - b)
+  // The shortest interval is everything except the largest gap around the globe.
+  let largestGap = west + 360 - east
+  let result: [number, number] = [west, east]
+  for (let i = 1; i < sorted.length; i++) {
+    const gap = sorted[i]! - sorted[i - 1]!
+    if (gap > largestGap) {
+      largestGap = gap
+      result = [sorted[i]!, sorted[i - 1]! + 360]
+    }
+  }
+  return result
+}
+
 export function worldRectsForBounds(bounds: { west: number; east: number; north: number; south: number }): WorldRect[] {
   const north = projectLocation(bounds.north, 0).y
   const south = projectLocation(bounds.south, 0).y
@@ -157,16 +178,17 @@ export function createPointSpatialIndex(points: readonly TimelinePoint[]) {
   return { query, sample, nearest, size: entries.length }
 }
 
-type ProjectedRoute = { points: TimelinePoint[]; x: Float64Array; y: Float64Array; bounds: WorldRect }
+type RoutePosition = [number, number]
+type ProjectedRoute = { positions: RoutePosition[]; x: Float64Array; y: Float64Array; bounds: WorldRect }
 export type RoutePositions = [number, number][][]
 
 function simplifyRoute(route: ProjectedRoute, tolerance: number): [number, number][] {
-  const { points, x, y } = route
-  if (points.length <= 2) return points.map(point => [point.lat, point.lng])
-  const keep = new Uint8Array(points.length)
+  const { positions, x, y } = route
+  if (positions.length <= 2) return positions
+  const keep = new Uint8Array(positions.length)
   keep[0] = 1
-  keep[points.length - 1] = 1
-  const stack = [0, points.length - 1]
+  keep[positions.length - 1] = 1
+  const stack = [0, positions.length - 1]
   const squaredTolerance = tolerance * tolerance
   while (stack.length) {
     const end = stack.pop()!
@@ -184,7 +206,7 @@ function simplifyRoute(route: ProjectedRoute, tolerance: number): [number, numbe
     if (furthest >= 0) { keep[furthest] = 1; stack.push(start, furthest, furthest, end) }
   }
   const result: [number, number][] = []
-  points.forEach((point, index) => { if (keep[index]) result.push([point.lat, point.lng]) })
+  positions.forEach((position, index) => { if (keep[index]) result.push(position) })
   return result
 }
 
@@ -195,16 +217,20 @@ export function createRouteGeometry(segments: readonly RouteSegment[]) {
     const x = new Float64Array(segment.points.length)
     const y = new Float64Array(segment.points.length)
     const bounds = { west: Infinity, east: -Infinity, north: Infinity, south: -Infinity }
-    segment.points.forEach((point, index) => {
-      const position = projectLocation(point.lat, point.lng)
+    let previousLng = segment.points[0]?.lng ?? 0
+    const positions = segment.points.map((point, index): RoutePosition => {
+      const lng = longitudeNear(point.lng, previousLng)
+      previousLng = lng
+      const position = projectLocation(point.lat, lng)
       x[index] = position.x
       y[index] = position.y
       bounds.west = Math.min(bounds.west, position.x)
       bounds.east = Math.max(bounds.east, position.x)
       bounds.north = Math.min(bounds.north, position.y)
       bounds.south = Math.max(bounds.south, position.y)
+      return [point.lat, lng]
     })
-    return { points: segment.points, x, y, bounds }
+    return { positions, x, y, bounds }
   })
   const cache = new Map<number, Map<number, [number, number][]>>()
   return {
@@ -218,13 +244,23 @@ export function createRouteGeometry(segments: readonly RouteSegment[]) {
       }
       const result: RoutePositions = []
       projected.forEach((route, index) => {
-        if (!rects.some(rect => overlaps(route.bounds, rect))) return
+        if (route.positions.length < 2) return
+        const visibleCopies = new Set<number>()
+        for (const rect of rects) {
+          if (route.bounds.north > rect.south || route.bounds.south < rect.north) continue
+          const firstCopy = Math.ceil(rect.west - route.bounds.east)
+          const lastCopy = Math.floor(rect.east - route.bounds.west)
+          for (let copy = firstCopy; copy <= lastCopy; copy++) visibleCopies.add(copy)
+        }
+        if (!visibleCopies.size) return
         let positions = atZoom!.get(index)
         if (!positions) {
           positions = simplifyRoute(route, 0.75 / (256 * 2 ** level))
           atZoom!.set(index, positions)
         }
-        if (positions.length > 1) result.push(positions)
+        for (const copy of visibleCopies) {
+          result.push(copy === 0 ? positions : positions.map(([lat, lng]) => [lat, lng + copy * 360]))
+        }
       })
       return result
     },

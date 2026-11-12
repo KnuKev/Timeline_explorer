@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import L from 'leaflet'
 import { useMap } from 'react-leaflet'
+import { MIN_MAP_ZOOM } from './mapAppearance'
 import landCoverUrl from './assets/world-land-cover.webp'
 
 // Natural Earth I with Shaded Relief (1:50m), projected to Web Mercator.
@@ -26,7 +27,6 @@ class LandCoverLayer extends L.GridLayer {
     tile.width = size.x
     tile.height = size.y
     loadLandCover().then(image => {
-      // Leaflet passes wrapped tile coordinates, so repeated worlds use the same image.
       const sourceSize = image.naturalWidth / 2 ** coords.z
       tile.getContext('2d')?.drawImage(image, coords.x * sourceSize, coords.y * sourceSize,
         sourceSize, sourceSize, 0, 0, size.x, size.y)
@@ -41,6 +41,8 @@ export default function MapLandCover() {
   useEffect(() => {
     const layer = new LandCoverLayer({
       className: 'map-land-cover',
+      minZoom: MIN_MAP_ZOOM,
+      minNativeZoom: 0,
       maxZoom: 4,
       opacity: 0.8,
       zIndex: 2,

@@ -243,6 +243,8 @@
 .map-land-cover { mix-blend-mode: multiply; pointer-events: none; }
 .dark .map-area, .dark .map-view { background: #191e26; }
 .dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) saturate(.4) brightness(.85) contrast(.88); }
+.map-area[data-background="satellite"] .map-view { background: #172638; }
+.map-area[data-background="satellite"] .leaflet-tile-pane { filter: none; }
 .leaflet-control-attribution { color: var(--text-secondary) !important; background: var(--map-surface) !important; font-size: 10px !important; }
 .leaflet-control-attribution a { color: var(--accent) !important; }
 .leaflet-control-zoom { display: none; }

@@ -59,7 +59,7 @@ function copiedPointIndex(index: SourceIndex, allPoints: readonly TimelinePoint[
   return index.keys
 }
 
-type Edge = { distanceKm: number; estimated: boolean; transport?: 'flight' } | { reason: 'invalid-time' | 'dateline' | 'gap' | 'speed' | 'same-time' | 'invalid-distance' }
+type Edge = { distanceKm: number; estimated: boolean; transport?: 'flight' } | { reason: 'invalid-time' | 'gap' | 'speed' | 'same-time' | 'invalid-distance' }
 
 function activityIntervals(points: readonly TimelinePoint[]): ActivityInterval[] {
   const activities = new Map<string, TimelineActivity>()
@@ -85,7 +85,7 @@ function activityIntervals(points: readonly TimelinePoint[]): ActivityInterval[]
       const hours = (Date.parse(point.timestamp) - Date.parse(previous.timestamp)) / 3_600_000
       const kilometers = distanceKm([previous, point])
       const speed = kilometers / hours
-      if (hours > 0 && hours <= 24 && kilometers >= 1 && speed >= 350 && speed <= MAX_MEASURED_TIMING_SPEED_KMH && Math.abs(point.lng - previous.lng) <= 180) {
+      if (hours > 0 && hours <= 24 && kilometers >= 1 && speed >= 350 && speed <= MAX_MEASURED_TIMING_SPEED_KMH) {
         runStart ??= previous
         runDistance += kilometers
       } else finishRun()
@@ -151,7 +151,6 @@ function analyseEdge(previous: TimelinePoint, current: TimelinePoint, allowMeasu
   const visitEnd = previous.kind === 'visit' && previous.endTimestamp ? Date.parse(previous.endTimestamp) : NaN
   if (Number.isFinite(visitEnd) && visitEnd >= previousTime && visitEnd <= currentTime) previousTime = visitEnd
   const elapsed = currentTime - previousTime
-  if (Math.abs(current.lng - previous.lng) > 180) return { reason: 'dateline' }
 
   const kilometers = distanceKm([previous, current])
   if (!Number.isFinite(kilometers)) return { reason: 'invalid-distance' }

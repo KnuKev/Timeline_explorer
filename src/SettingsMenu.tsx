@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { DistanceUnits } from './formatting'
 import { translations, type Language } from './i18n'
+import type { MapBackground } from './mapAppearance'
 import { mergeTranslations } from './mergeI18n'
 import Icon from './Icon'
 
@@ -8,13 +9,16 @@ type Props = {
   language: Language
   distanceUnits: DistanceUnits
   isDark: boolean
+  mapBackground: MapBackground
+  onMapBackgroundChange: (background: MapBackground) => void
   onLanguageChange: (language: Language) => void
   onDistanceUnitsChange: (units: DistanceUnits) => void
   onToggleTheme: () => void
   onMerge: () => void
+  onExport: () => void
 }
 
-export default function SettingsMenu({ language, distanceUnits, isDark, onLanguageChange, onDistanceUnitsChange, onToggleTheme, onMerge }: Props) {
+export default function SettingsMenu({ language, distanceUnits, isDark, mapBackground, onMapBackgroundChange, onLanguageChange, onDistanceUnitsChange, onToggleTheme, onMerge, onExport }: Props) {
   const [open, setOpen] = useState(false)
   const panel = useRef<HTMLDivElement>(null)
   const cornerButton = useRef<HTMLButtonElement>(null)
@@ -42,6 +46,12 @@ export default function SettingsMenu({ language, distanceUnits, isDark, onLangua
     }
   }, [open])
 
+  function openDialog(action: () => void) {
+    setOpen(false)
+    cornerButton.current?.focus()
+    action()
+  }
+
   return <div className="settings-anchor">
     <div ref={panel} className="display-controls" data-open={open} role={open ? 'group' : undefined} aria-label={open ? t.settings : undefined}>
       <button ref={cornerButton} className="toolbar-button settings-corner" type="button" aria-label={cornerLabel} title={cornerLabel}
@@ -58,16 +68,12 @@ export default function SettingsMenu({ language, distanceUnits, isDark, onLangua
           <button type="button" lang="nb" aria-label="Norsk bokmål" aria-pressed={language === 'nb'} onClick={() => onLanguageChange('nb')}>NO</button>
           <button type="button" lang="en" aria-label="English" aria-pressed={language === 'en'} onClick={() => onLanguageChange('en')}>EN</button>
         </div>
-        <button className="toolbar-button settings-merge" type="button" title={mergeLabel} aria-label={mergeLabel} aria-haspopup="dialog" onClick={() => {
-          setOpen(false)
-          cornerButton.current?.focus()
-          onMerge()
-        }}><Icon name="merge" /></button>
+        <button className="toolbar-button settings-merge" type="button" title={mergeLabel} aria-label={mergeLabel} aria-haspopup="dialog" onClick={() => openDialog(onMerge)}><Icon name="merge" /></button>
         <div className="toolbar-switch settings-map" role="group" aria-label={t.mapBackground}>
-          <button type="button" aria-label={t.map} title={t.map} aria-pressed="true"><Icon name="map" /></button>
-          <button type="button" aria-label={t.satellite} title={`${t.satellite} · ${t.comingSoon}`} disabled><Icon name="satellite" /></button>
+          <button type="button" aria-label={t.map} title={t.map} aria-pressed={mapBackground === 'map'} onClick={() => onMapBackgroundChange('map')}><Icon name="map" /></button>
+          <button type="button" aria-label={t.satellite} title={t.satellite} aria-pressed={mapBackground === 'satellite'} onClick={() => onMapBackgroundChange('satellite')}><Icon name="satellite" /></button>
         </div>
-        <button className="toolbar-button settings-export" type="button" title={`${t.exportKml} · ${t.comingSoon}`} aria-label={t.exportKml} disabled><Icon name="download" /></button>
+        <button className="toolbar-button settings-export" type="button" title={t.exportTimeline} aria-label={t.exportTimeline} aria-haspopup="dialog" onClick={() => openDialog(onExport)}><Icon name="download" /></button>
       </div>
     </div>
   </div>

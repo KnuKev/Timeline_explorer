@@ -1,0 +1,20 @@
+.export-fields { display: grid; gap: 12px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.export-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.export-fields label { display: grid; gap: 6px; min-width: 0; color: var(--text-secondary); font-size: 12px; }
+.export-fields input[type="date"], .export-fields select {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background-color: var(--surface);
+  color: var(--text);
+}
+.export-fields input[type="date"] { padding-inline: 10px; }
+.export-all { justify-self: start; font-size: 12px; }
+.export-fields .export-checkbox { display: flex; align-items: center; }
+.export-checkbox input { margin: 0 3px 0 0; accent-color: var(--accent-solid); }
+@media (max-width: 410px) {
+  .export-dialog { padding: 18px; }
+  .export-fields input[type="date"] { padding-inline: 6px; font-size: 12px; }
+}

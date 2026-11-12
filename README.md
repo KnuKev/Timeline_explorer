@@ -11,11 +11,17 @@ A Google Maps Timeline viewer for exploring your Google Location History on an i
 1. Open [Timeline Explorer](https://knukev.github.io/Timeline_explorer/) and try the fictional London–Paris–Amsterdam–Oslo–London journey. No installation or account is needed.
 2. To explore your own history, open **Map → Choose file** and select a Google Timeline JSON export. Mobile Timeline exports and older Takeout files such as `Records.json` are supported. Unzip archived exports first.
 
-Your file stays in browser memory and is never uploaded to GitHub. Refreshing the page clears it. OpenStreetMap receives map tile requests for the area you view.
+Your file stays in browser memory and is never uploaded to GitHub. Refreshing the page clears it. The selected map provider (OpenStreetMap or EOX) receives tile requests for the area you view.
 
 ## Combine Timeline files
 
-Click the **Merge** icon to the left of the language selector, choose two Timeline JSON files, and download the combined file. The originals stay unchanged. Duplicate records are removed, missing data is filled from either file, and conflicting values are preserved. Open the downloaded JSON with **Map → Choose file**.
+Click the **Merge** icon in settings, choose two Timeline JSON files, and download the combined file. The originals stay unchanged. Duplicate records are removed, missing data is filled from either file, and conflicting values are preserved. Open the downloaded JSON with **Map → Choose file**.
+
+## Export routes and location points
+
+Open **Settings → Export timeline**. Choose a date range or select all dates, then download KML for Google Earth, GPX for GPS apps, or GeoJSON for mapping tools. The export is created locally in your browser. Suspicious location points are excluded by default. If the selected dates contain any, select **Include suspicious location points** to include them.
+
+Routes, flights, visited places, and other location points appear in separate folders in the KML file. Point markers appear without labels on the map.
 
 ## Run locally
 
@@ -56,4 +62,4 @@ Visualize total recorded distance, monthly travel patterns, time-of-day activity
 
 ## Credits
 
-Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright). Place names from [GeoNames](https://www.geonames.org/) (CC BY 4.0). Country outlines from Natural Earth via `world-atlas`. Low-zoom land cover from [Natural Earth I with Shaded Relief](https://www.naturalearthdata.com/downloads/50m-raster-data/50m-natural-earth-1/). [Roboto font license](public/fonts/OFL.txt).
+Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright). Satellite imagery from [EOxCloudless](https://cloudless.eox.at) by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2016). Place names from [GeoNames](https://www.geonames.org/) (CC BY 4.0). Country outlines from Natural Earth via `world-atlas`. Low-zoom land cover from [Natural Earth I with Shaded Relief](https://www.naturalearthdata.com/downloads/50m-raster-data/50m-natural-earth-1/). [Roboto font license](public/fonts/OFL.txt).

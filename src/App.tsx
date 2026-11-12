@@ -10,7 +10,7 @@ import { prepareTimeline, selectTimelineRange, groupTimelineSelection, adjacentR
 import { useTimelineImport } from './useTimelineImport'
 import { usePlaces } from './usePlaces'
 import TimelineMap from './TimelineMap'
-import { getMapColors } from './mapAppearance'
+import { getMapColors, getStoredMapBackground, mapBackgroundStorageKey } from './mapAppearance'
 import PointList from './PointList'
 import Icon from './Icon'
 import SettingsMenu from './SettingsMenu'
@@ -23,6 +23,7 @@ type PlaceScope = { kind: 'country' | 'city'; name: string; key: string; country
 const Statistics = lazy(() => import('./Statistics.tsx'))
 const Trips = lazy(() => import('./Trips.tsx'))
 const MergeDialog = lazy(() => import('./MergeDialog.tsx'))
+const ExportDialog = lazy(() => import('./ExportDialog.tsx'))
 
 const demoTimelineUrl = new URL('./data/fictional-timeline.json', import.meta.url).href
 
@@ -47,7 +48,7 @@ function App() {
   const pointsById = useMemo(() => new Map(importedPoints.map(point => [point.id, point])), [importedPoints])
   const suspectPointIds = useMemo(() => new Set(dataset.excluded.map(entry => entry.point.id)), [dataset])
   const [activeTab, setActiveTab] = useState<ActiveTab>('map')
-  const [mergeOpen, setMergeOpen] = useState(false)
+  const [fileDialog, setFileDialog] = useState<'merge' | 'export' | null>(null)
   const [placeMode, setPlaceMode] = useState<'countries' | 'cities'>('countries')
   const [placeYear, setPlaceYear] = useState('all')
   const [placesRequested, setPlacesRequested] = useState(false)
@@ -59,7 +60,8 @@ function App() {
   const [placeViewEnabled, setPlaceViewEnabled] = useState(false)
   const [isDemo, setIsDemo] = useState(true)
   const [isDark, setIsDark] = useState(() => { try { return localStorage.getItem('timeline-explorer-dark') === 'true' } catch { return false } })
-  const mapColors = getMapColors(isDark)
+  const [mapBackground, setMapBackground] = useState(getStoredMapBackground)
+  const mapColors = getMapColors(isDark || mapBackground === 'satellite')
   const [isPointListExpanded, setIsPointListExpanded] = useState(false)
   const [dateMode, setDateMode] = useState<DateMode>('period')
   const [selectedDate, setSelectedDate] = useState(demoStartDate)
@@ -69,6 +71,7 @@ function App() {
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null)
   const { data: placeAnalysis, statistics, trips, loading: placesLoading, statisticsLoading, tripsLoading, error: placesError, retry: retryPlaces } = usePlaces(dataset, showSuspectPoints, placesRequested, statisticsRequested, tripsRequested, homeRadiusKm)
   useEffect(() => { try { localStorage.setItem('timeline-explorer-dark', String(isDark)) } catch { /* Storage is optional. */ } }, [isDark])
+  useEffect(() => { try { localStorage.setItem(mapBackgroundStorageKey, mapBackground) } catch { /* Storage is optional. */ } }, [mapBackground])
   useEffect(() => { try { localStorage.setItem(homeRadiusStorageKey, String(homeRadiusKm)) } catch { /* The radius also works without storage. */ } }, [homeRadiusKm])
 
   const availableDays = useMemo(() => dataset.days.filter(day => showSuspectPoints || day.cleanCount > 0).map(day => day.day), [dataset, showSuspectPoints])
@@ -221,11 +224,18 @@ function App() {
         </nav>
 
         <SettingsMenu language={language} distanceUnits={distanceUnits} isDark={isDark}
+          mapBackground={mapBackground} onMapBackgroundChange={setMapBackground}
           onLanguageChange={setLanguage} onDistanceUnitsChange={setDistanceUnits}
-          onToggleTheme={() => setIsDark(current => !current)} onMerge={() => setMergeOpen(true)} />
+          onToggleTheme={() => setIsDark(current => !current)} onMerge={() => setFileDialog('merge')} onExport={() => setFileDialog('export')} />
       </header>
 
-      {mergeOpen && <Suspense fallback={null}><MergeDialog language={language} onClose={() => setMergeOpen(false)} /></Suspense>}
+      {fileDialog && <Suspense fallback={null}>
+        {fileDialog === 'merge'
+          ? <MergeDialog language={language} onClose={() => setFileDialog(null)} />
+          : <ExportDialog dataset={dataset} language={language}
+            initialFrom={dateMode === 'day' ? selectedDate : fromDate} initialTo={dateMode === 'day' ? selectedDate : toDate}
+            onClose={() => setFileDialog(null)} />}
+      </Suspense>}
 
       {activeTab === 'places' && (
         <div className="places-page">
@@ -393,8 +403,8 @@ function App() {
 
         </aside>
 
-        <section className="map-area" aria-label={t.mapLabel}>
-          <TimelineMap points={mapPoints} routeSegments={route.segments} selectedPointId={selectedPointId} isDark={isDark} language={language} onSelect={setSelectedPointId} active={activeTab === 'map'} />
+        <section className="map-area" data-background={mapBackground} aria-label={t.mapLabel}>
+          <TimelineMap mapBackground={mapBackground} points={mapPoints} routeSegments={route.segments} selectedPointId={selectedPointId} isDark={isDark} language={language} onSelect={setSelectedPointId} active={activeTab === 'map'} />
 
           <div className="map-bottom-overlay">
             <div className="map-legend">

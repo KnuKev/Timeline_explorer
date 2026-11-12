@@ -148,7 +148,7 @@ test('semantic recovery requires known provenance, reachable anchors and no inte
     [origin, wrong, { ...destination, timestamp: '2025-01-02T12:00:00Z' }],
     [origin, wrong, { ...destination, timestamp: 'invalid' }],
     [origin, wrong, measured('near-oslo', 59.92, 10.71, '2025-01-01T12:00:00Z')],
-    [measured('east', 0, 179, '2025-01-01T10:00:00Z'), wrong, measured('west', 0, -179, '2025-01-01T12:00:00Z')],
+    [measured('east', 0, 179, '2025-01-01T10:00:00Z'), wrong, measured('west', 0, -150, '2025-01-01T12:00:00Z')],
   ]
   for (const points of cases) {
     const result = buildRouteSegments(points)
@@ -247,14 +247,22 @@ test('contradictory semantic endpoints retain strict speed checks inside a measu
   assert.deepEqual(recovered.segments[0].points, [origin, destination])
 })
 
-test('gaps, impossible simultaneous movement and dateline crossings do not create lines', () => {
+test('gaps and impossible simultaneous movement do not create lines', () => {
   const cases = [
     [point('a', 59.91, 10.7, '2025-01-01T10:00:00Z'), point('b', 59.92, 10.71, '2025-01-02T10:00:00Z')],
     [point('a', 59.91, 10.7, '2025-01-01T10:00:00Z'), point('b', 59.92, 10.71, '2025-01-01T10:00:00Z')],
     [point('a', 59.91, 10.7, '2025-01-01T10:00:00Z'), point('b', 59.92, 10.71, '2025-01-01T09:59:00Z')],
-    [point('a', 0, 179.9, '2025-01-01T10:00:00Z'), point('b', 0, -179.9, '2025-01-01T11:00:00Z')],
   ]
   for (const points of cases) assert.deepEqual(buildRouteSegments(points), { segments: [], distanceKm: 0 })
+})
+
+test('a plausible Los Angeles to Tokyo flight crosses the date line and counts its distance', () => {
+  const origin = point('LAX', 33.94, -118.41, '2025-01-01T18:00:00Z')
+  const destination = point('HND', 35.55, 139.78, '2025-01-02T05:30:00Z')
+  const result = buildRouteSegments([origin, destination])
+  assert.equal(result.segments.length, 1)
+  assert.equal(result.segments[0]?.transport, 'flight')
+  assert.ok(result.distanceKm > 8_000 && result.distanceKm < 10_000)
 })
 
 test('filtering out another country never connects the two separate visits', () => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createPointSpatialIndex, createRouteGeometry, projectLocation, worldRectsForBounds, type WorldRect } from '../src/mapSpatial.ts'
+import { createPointSpatialIndex, createRouteGeometry, projectLocation, shortestLongitudeRange, worldRectsForBounds, type WorldRect } from '../src/mapSpatial.ts'
 import type { TimelinePoint } from '../src/timeline.ts'
 
 const point = (id: string, lat: number, lng: number): TimelinePoint => ({ id, lat, lng, timestamp: '2025-01-01T12:00:00Z', kind: 'path', label: 'Rutepunkt' })
@@ -85,4 +85,23 @@ test('zoom simplification preserves segment ends and real corners without synthe
   assert.equal(geometry.visible(10, allWorld)[0], positions[0], 'Cached arrays are reused on panning')
   assert.deepEqual(geometry.visible(10, [{ west: 0, east: 0.1, north: 0, south: 0.1 }]), [])
   assert.ok(geometry.visible(22, allWorld)[0]!.length >= positions[0]!.length)
+})
+
+
+test('a Pacific route uses nearby world copies and fits around the date line', () => {
+  const origin = point('LAX', 33.94, -118.41)
+  const destination = point('HND', 35.55, 139.78)
+  const points = [origin, destination]
+  const [west, east] = shortestLongitudeRange(points, origin.lng, destination.lng)
+  assert.equal(west, destination.lng)
+  assert.equal(east, origin.lng + 360)
+
+  const geometry = createRouteGeometry([{ id: 'pacific', points, transport: 'flight' }])
+  assert.deepEqual(geometry.visible(4, [{ west: 0.85, east: 1.2, north: 0, south: 1 }]), [
+    [[origin.lat, origin.lng + 360], [destination.lat, destination.lng]],
+  ])
+  assert.deepEqual(geometry.visible(4, [{ west: -0.15, east: 0.2, north: 0, south: 1 }]), [
+    [[origin.lat, origin.lng], [destination.lat, destination.lng - 360]],
+  ])
+  assert.deepEqual(geometry.visible(4, [{ west: 0.35, east: 0.65, north: 0, south: 1 }]), [])
 })
