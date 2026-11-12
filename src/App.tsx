@@ -13,7 +13,7 @@ import TimelineMap from './TimelineMap'
 import { getMapColors } from './mapAppearance'
 import PointList from './PointList'
 import Icon from './Icon'
-import { mergeTranslations } from './mergeI18n'
+import SettingsMenu from './SettingsMenu'
 import { distanceUnitsStorageKey, formatCalendarDate, formatPlaceDate, formatPointInterval, formatDistance, formatLargeDistance, getStoredDistanceUnits } from './formatting'
 import './App.css'
 
@@ -220,18 +220,9 @@ function App() {
           <button className={'nav-item' + (activeTab === 'statistics' ? ' is-current' : '')} aria-current={activeTab === 'statistics' ? 'page' : undefined} type="button" onClick={() => { setPlacesRequested(true); setStatisticsRequested(true); setActiveTab('statistics') }}><Icon name="chart" /><span>{t.statistics}</span></button>
         </nav>
 
-        <div className="display-controls">
-          <button className="toolbar-button merge-toggle" type="button" title={mergeTranslations[language].title} aria-label={mergeTranslations[language].title} aria-haspopup="dialog" onClick={() => setMergeOpen(true)}><Icon name="merge" /></button>
-          <div className="toolbar-switch" role="group" aria-label={t.distanceUnits}>
-            <button type="button" aria-label={t.metric} title={t.metric} aria-pressed={distanceUnits === 'metric'} onClick={() => setDistanceUnits('metric')}>km</button>
-            <button type="button" aria-label={t.imperial} title={t.imperial} aria-pressed={distanceUnits === 'imperial'} onClick={() => setDistanceUnits('imperial')}>mi</button>
-          </div>
-          <div className="toolbar-switch" role="group" aria-label={t.language}>
-            <button type="button" lang="nb" aria-label="Norsk bokmål" aria-pressed={language === 'nb'} onClick={() => setLanguage('nb')}>NO</button>
-            <button type="button" lang="en" aria-label="English" aria-pressed={language === 'en'} onClick={() => setLanguage('en')}>EN</button>
-          </div>
-          <button className="toolbar-button theme-toggle" type="button" aria-label={isDark ? t.lightTheme : t.darkTheme} title={isDark ? t.lightTheme : t.darkTheme} onClick={() => setIsDark((current) => !current)}><Icon name={isDark ? 'sun' : 'moon'} /></button>
-        </div>
+        <SettingsMenu language={language} distanceUnits={distanceUnits} isDark={isDark}
+          onLanguageChange={setLanguage} onDistanceUnitsChange={setDistanceUnits}
+          onToggleTheme={() => setIsDark(current => !current)} onMerge={() => setMergeOpen(true)} />
       </header>
 
       {mergeOpen && <Suspense fallback={null}><MergeDialog language={language} onClose={() => setMergeOpen(false)} /></Suspense>}

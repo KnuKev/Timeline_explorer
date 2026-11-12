@@ -56,4 +56,4 @@ Visualize total recorded distance, monthly travel patterns, time-of-day activity
 
 ## Credits
 
-Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright). Place names from [GeoNames](https://www.geonames.org/) (CC BY 4.0). Country outlines from Natural Earth via `world-atlas`. [Roboto font license](public/fonts/OFL.txt).
+Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright). Place names from [GeoNames](https://www.geonames.org/) (CC BY 4.0). Country outlines from Natural Earth via `world-atlas`. Low-zoom land cover from [Natural Earth I with Shaded Relief](https://www.naturalearthdata.com/downloads/50m-raster-data/50m-natural-earth-1/). [Roboto font license](public/fonts/OFL.txt).

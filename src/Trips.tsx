@@ -138,6 +138,7 @@ function TripHistory({ trips, groups, scope, locale, t, regionNames, onOpenTrip 
 
 export default function Trips({ data, loading, error, language, isDemo = false, distanceUnits = 'metric', homeRadiusKm, onHomeRadiusChange, onRetry, onOpenTrip }: Props) {
   const [selectedYear, setYear] = useState('all')
+  const radiusHintId = useId()
   const [selectedScope, setScope] = useState<TripScope | null>(null)
   const locale = locales[language]
   const t = tripsTranslations[language]
@@ -163,10 +164,10 @@ export default function Trips({ data, loading, error, language, isDemo = false, 
     </header>
     <p className="trips-intro">{t.intro}</p>
     <div className="trips-settings">
+      <p className="trips-radius-hint" id={radiusHintId}>{t.radiusHint.replace('{radius}', formatLargeDistance(homeRadiusKm, locale, distanceUnits))}</p>
       <div className="trips-scope-switch" role="group" aria-label={t.tripScope}>{(['domestic', 'international', ...(counts.unknown ? ['unknown'] : [])] as TripScope[]).map(candidate => <button type="button" key={candidate} disabled={!ready} aria-pressed={scope === candidate} onClick={() => setScope(candidate)}>{scopeLabels[candidate]}{ready && <span>{counts[candidate].toLocaleString(locale)}</span>}</button>)}</div>
-      <label className="trips-select compact trips-radius"><span>{t.homeRadius}</span><select value={homeRadiusKm} onChange={event => onHomeRadiusChange(Number(event.target.value))}>{HOME_RADIUS_OPTIONS.map(radius => <option key={radius} value={radius}>{formatLargeDistance(radius, locale, distanceUnits)}</option>)}</select></label>
+      <label className="trips-select compact trips-radius"><span>{t.homeRadius}</span><select aria-describedby={radiusHintId} value={homeRadiusKm} onChange={event => onHomeRadiusChange(Number(event.target.value))}>{HOME_RADIUS_OPTIONS.map(radius => <option key={radius} value={radius}>{formatLargeDistance(radius, locale, distanceUnits)}</option>)}</select></label>
     </div>
-    <p className="trips-radius-hint">{t.radiusHint.replace('{radius}', formatLargeDistance(homeRadiusKm, locale, distanceUnits))}</p>
     {pending ? <div className="trips-state" role="status"><span className="trips-spinner" /><h2>{t.loading}</h2><p>{t.loadingHint}</p></div> : error ? <div className="trips-state" role="alert"><Icon name="route" /><h2>{t.error}</h2><p>{error}</p><button type="button" className="primary-button" onClick={onRetry}>{t.retry}</button></div> : !currentData ? <div className="trips-state"><Icon name="route" /><h2>{t.noData}</h2><p>{t.noDataHint}</p></div> : currentData.homeStatus === 'missing' ? <div className="trips-state trips-empty"><Icon name="pin" /><h2>{t.homeMissing}</h2><p>{t.homeMissingHint}</p></div> : yearTrips.length === 0 ? <div className="trips-state trips-empty"><Icon name="route" /><h2>{t.noTrips}</h2><p>{t.noTripsHint}</p></div> : <>
       <div className="trips-overview" aria-label={`${t.overview}: ${scopeLabels[scope]}`}>
         <div className="trips-hero"><span><Icon name="route" />{t.completedTrips}</span><strong>{trips.length.toLocaleString(locale)}</strong><small>{t.completedHint}</small></div>

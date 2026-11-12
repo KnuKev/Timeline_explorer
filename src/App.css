@@ -1,5 +1,9 @@
 .app-shell {
   --toolbar-height: 48px;
+  --settings-cell: 34px;
+  --settings-gap: 6px;
+  --settings-panel-width: calc(3 * var(--settings-cell) + 2 * var(--settings-gap) + 12px);
+  --report-toolbar-clearance: calc(var(--workspace-gap) + var(--toolbar-height) + 12px);
   --sidebar-width: 360px;
   --workspace-gap: 20px;
   --background: #f4f5f7;
@@ -73,17 +77,47 @@
   pointer-events: auto;
 }
 .main-nav { grid-column: 2; gap: 4px; }
-.display-controls { grid-column: 3; justify-self: end; gap: 8px; }
+.settings-anchor {
+  grid-column: 3;
+  justify-self: end;
+  position: relative;
+  width: calc(var(--settings-cell) + 12px);
+  height: var(--toolbar-height);
+}
+.display-controls {
+  position: absolute;
+  inset: 0 0 auto auto;
+  display: grid;
+  grid-template-columns: var(--settings-cell);
+  justify-items: stretch;
+}
+.display-controls[data-open="true"] {
+  width: var(--settings-panel-width);
+  height: auto;
+  grid-template-columns: repeat(3, var(--settings-cell));
+  grid-template-rows: repeat(3, var(--settings-cell));
+  gap: var(--settings-gap);
+}
+.settings-options:not([hidden]) { display: contents; }
+.settings-options[hidden] { display: none; }
+.settings-corner { grid-column: -2; grid-row: 1; }
+.settings-units { grid-area: 1 / 1 / 2 / 3; }
+.settings-language { grid-area: 2 / 1 / 3 / 3; }
+.settings-map { grid-area: 3 / 1 / 4 / 3; }
+.settings-merge { grid-area: 2 / 3; }
+.settings-export { grid-area: 3 / 3; }
 .nav-item { display: flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: pointer; transition: background .15s, color .15s; }
 .nav-item .ui-icon { width: 16px; height: 16px; }
 .nav-item:hover:not(:disabled) { background: var(--surface-muted); color: var(--text); }
 .nav-item.is-current, .nav-item.is-current:hover { color: var(--accent); background: var(--accent-soft); }
 .nav-item:disabled { opacity: .45; cursor: default; }
-.toolbar-switch { display: flex; padding: 3px; border-radius: 8px; background: var(--surface-muted); }
-.toolbar-switch button { min-width: 33px; height: 27px; padding: 0 7px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 11px; font-weight: 500; cursor: pointer; }
+.toolbar-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; padding: 3px; border-radius: 8px; background: var(--surface-muted); }
+.toolbar-switch button { display: grid; place-items: center; min-width: 0; height: calc(var(--settings-cell) - 6px); padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 11px; font-weight: 500; cursor: pointer; }
 .toolbar-switch button[aria-pressed="true"] { background: var(--surface-raised); color: var(--text); box-shadow: 0 1px 4px #00000014; }
-.toolbar-button { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text-secondary); cursor: pointer; }
-.toolbar-button:hover { color: var(--text); background: var(--surface-muted); }
+.toolbar-button { width: var(--settings-cell); height: var(--settings-cell); display: grid; place-items: center; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text-secondary); cursor: pointer; }
+.toolbar-button:hover:not(:disabled) { color: var(--text); background: var(--surface-muted); }
+.display-controls button:disabled { opacity: .42; cursor: default; }
+.settings-map .ui-icon { width: 16px; height: 16px; }
 
 .workspace { position: relative; height: 100%; }
 .workspace[hidden] { display: none; }
@@ -93,10 +127,34 @@
 .report-heading h1 { display: flex; align-items: center; flex-wrap: wrap; min-height: var(--toolbar-height); }
 .report-period { display: flex; flex: 0 0 auto; align-items: center; min-height: var(--toolbar-height); gap: 8px; }
 .report-period > span { color: var(--text-secondary); font-size: 10px; }
-.report-period select { height: 39px; padding: 0 24px 0 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text); font-size: 12px; font-weight: 500; cursor: pointer; }
-@media (min-width: 1320px) {
-  /* Keep the filter clear of the floating display controls. */
-  .report-heading { padding-inline-end: max(0px, calc(50% - 50vw + 286px)); }
+.report-period select { height: 39px; border: 1px solid var(--border); border-radius: 9px; background-color: var(--surface); color: var(--text); font-size: 12px; font-weight: 500; cursor: pointer; }
+.app-shell select {
+  --select-inset: 12px;
+  appearance: none;
+  padding: 0 calc(2 * var(--select-inset) + 10px) 0 var(--select-inset);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='m1 1 4 4 4-4' fill='none' stroke='%23656973' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: right var(--select-inset) center;
+  background-repeat: no-repeat;
+  background-size: 10px 6px;
+}
+.app-shell.dark select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='m1 1 4 4 4-4' fill='none' stroke='%23a5a8b2' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+@media (forced-colors: active) {
+  .app-shell select, .app-shell.dark select {
+    appearance: auto;
+    padding-inline-end: var(--select-inset);
+    background-image: none;
+  }
+}
+@media (min-width: 681px) {
+  .report-heading {
+    /* Reserve the width of the open panel at the right edge of the viewport. */
+    padding-inline-end: max(0px, calc(50% - 50vw + var(--workspace-gap) + var(--settings-panel-width) + 12px));
+  }
+}
+@media (min-width: 1100px) {
+  .app-shell { --report-toolbar-clearance: var(--workspace-gap); }
 }
 .sidebar { position: absolute; z-index: 300; top: var(--workspace-gap); left: var(--workspace-gap); width: var(--sidebar-width); max-height: calc(100% - 2 * var(--workspace-gap)); padding: 20px; overflow-y: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow); scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 .sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
@@ -182,6 +240,7 @@
 .map-view { width: 100%; height: 100%; z-index: 1; background: #e4e9ed; }
 .leaflet-container { font: inherit; }
 .leaflet-tile-pane { filter: saturate(.62); }
+.map-land-cover { mix-blend-mode: multiply; pointer-events: none; }
 .dark .map-area, .dark .map-view { background: #191e26; }
 .dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) saturate(.4) brightness(.85) contrast(.88); }
 .leaflet-control-attribution { color: var(--text-secondary) !important; background: var(--map-surface) !important; font-size: 10px !important; }
@@ -213,7 +272,7 @@
 .selected-card strong { font-size: 14px; font-weight: 500; }
 .selected-card > span:last-child { color: var(--text-secondary); font-size: 11px; line-height: 1.6; font-variant-numeric: tabular-nums; }
 
-.places-page { --toolbar-clearance: calc(var(--workspace-gap) + var(--toolbar-height) + 12px); height: 100%; padding: var(--toolbar-clearance) clamp(24px, 4.5vw, 72px) 42px; scroll-padding-top: var(--toolbar-clearance); overflow-y: auto; background: var(--background); }
+.places-page { height: 100%; padding: var(--report-toolbar-clearance) clamp(24px, 4.5vw, 72px) 42px; scroll-padding-top: var(--report-toolbar-clearance); overflow-y: auto; background: var(--background); }
 .places-page-heading { max-width: 1280px; margin: 0 auto 28px; }
 .places-page-heading h1 { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -1px; }
 .places-page-heading p { margin: 8px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
@@ -262,13 +321,10 @@
 .places-page > .quality-notice { max-width: 1280px; margin: 0 auto 20px; }
 .places-page > .quality-reopen { display: block; max-width: 1280px; width: 100%; margin: 0 auto 18px; }
 
-.app-shell :is(button, input, summary, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.app-shell :is(button, input, select, summary, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .import-button:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }
 .map-zoom-controls button:focus-visible { outline-offset: -4px; }
 
-@media (min-width: 1320px) {
-  .places-page { padding-top: var(--workspace-gap); }
-}
 @media (max-width: 1100px) {
   .nav-item { padding-inline: 11px; }
 }
@@ -286,13 +342,14 @@
   .summary-card strong { font-size: 24px; }
 }
 @media (max-width: 680px) {
-  .app-shell { --workspace-gap: 12px; }
+  .app-shell { --workspace-gap: 12px; --settings-cell: 32px; }
+  .app-shell:has(.display-controls[data-open="true"]) {
+    --report-toolbar-clearance: calc(var(--workspace-gap) + 3 * var(--settings-cell) + 2 * var(--settings-gap) + 24px);
+  }
   .floating-toolbar { grid-template-columns: auto 1fr; gap: 8px; }
   .main-nav { grid-column: 1; gap: 1px; }
-  .display-controls { grid-column: 2; gap: 5px; }
+  .settings-anchor { grid-column: 2; }
   .nav-item { font-size: 12px; padding-inline: 8px; }
-  .toolbar-switch button { min-width: 26px; padding-inline: 4px; }
-  .toolbar-button { width: 30px; height: 32px; }
   .sidebar { width: min(var(--sidebar-width), calc(100% - 24px)); max-height: min(58%, calc(100% - var(--toolbar-height) - 3 * var(--workspace-gap))); }
   .map-bottom-overlay { left: 12px; }
   .selected-card { left: 12px; right: 64px; max-width: calc(100% - 76px); }
@@ -303,10 +360,6 @@
 }
 @media (max-width: 520px) {
   .nav-item { width: 31px; padding: 0; }
-  .display-controls { gap: 3px; }
-  .display-controls .toolbar-button { width: 28px; }
-  .toolbar-switch button { min-width: 24px; }
-  .report-period select { padding-inline: 8px; }
   .nav-item > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

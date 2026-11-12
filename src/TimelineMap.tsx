@@ -8,6 +8,7 @@ import type { RouteSegment } from './routes'
 import { createPointSpatialIndex, createRouteGeometry, projectLocation, worldRectsForBounds } from './mapSpatial'
 import { POINTS_MIN_ZOOM, getMapColors } from './mapAppearance'
 import Icon from './Icon'
+import MapLandCover from './MapLandCover'
 
 type Props = {
   active?: boolean
@@ -251,6 +252,7 @@ const TimelineMap = memo(function TimelineMap(props: Props) {
   const first = props.points[0]
   return <MapContainer className="map-view" center={first ? [first.lat, first.lng] : [0, 0]} zoom={first ? 15 : 2} zoomControl={false} trackResize={false} preferCanvas worldCopyJump>
     <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
+    <MapLandCover />
     <MapContents {...props} />
   </MapContainer>
 })

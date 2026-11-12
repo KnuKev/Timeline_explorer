@@ -1,6 +1,6 @@
 import type { ReactNode, SVGProps } from 'react'
 
-type IconName = 'map' | 'route' | 'globe' | 'chart' | 'upload' | 'shield' | 'pin' | 'sun' | 'moon' | 'close' | 'left' | 'right' | 'down' | 'plus' | 'minus' | 'fit' | 'arrow' | 'merge' | 'plane' | 'car' | 'train' | 'question'
+type IconName = 'map' | 'route' | 'globe' | 'chart' | 'upload' | 'shield' | 'pin' | 'sun' | 'moon' | 'close' | 'left' | 'right' | 'down' | 'plus' | 'minus' | 'fit' | 'arrow' | 'merge' | 'plane' | 'car' | 'train' | 'question' | 'settings' | 'satellite' | 'download'
 const paths: Record<IconName, ReactNode> = {
   map: <><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2Z" /><path d="M9 3v16M15 5v16" /></>,
   route: <><circle cx="6" cy="5" r="2" /><circle cx="18" cy="19" r="2" /><path d="M8 5h7a4 4 0 0 1 0 8H9a3 3 0 0 0 0 6h7" /></>,
@@ -23,6 +23,9 @@ const paths: Record<IconName, ReactNode> = {
   plane: <path d="M12 3a2 2 0 0 1 2 2v4l7 4v2l-7-2v5l2 2v1l-4-1-4 1v-1l2-2v-5l-7 2v-2l7-4V5a2 2 0 0 1 2-2Z" />,
   car: <><path d="m5 9 2-5h10l2 5M4 16v3m16-3v3M3 9h18v7H3Z" /><path d="M6 12h2m8 0h2" /></>,
   train: <><rect x="5" y="3" width="14" height="15" rx="3" /><path d="M5 10h14M12 3v7M8 18l-3 3m11-3 3 3M8 14h1m6 0h1" /></>,
+  settings: <><circle cx="12" cy="12" r="3" /><path d="m10 3-.6 2.3-1.7 1L5.4 5.7l-2 3.5 1.7 1.7v2.2l-1.7 1.7 2 3.5 2.3-.6 1.7 1 .6 2.3h4l.6-2.3 1.7-1 2.3.6 2-3.5-1.7-1.7v-2.2l1.7-1.7-2-3.5-2.3.6-1.7-1L14 3Z" /></>,
+  satellite: <><rect x="9" y="9" width="6" height="6" rx="1" transform="rotate(-45 12 12)" /><path d="m7.8 9.2-4-4 2.8-2.8 4 4m2.8 11.2 4 4 2.8-2.8-4-4M5 14a5 5 0 0 0 5 5m-8-5a8 8 0 0 0 8 8" /></>,
+  download: <path d="M12 3v12m-4-4 4 4 4-4M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" />,
   question: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 1 1 4 2c-1 .6-1.5 1-1.5 2M12 16h.01" /></>,
 }
 
