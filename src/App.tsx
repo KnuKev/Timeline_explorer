@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { parseTimeline, type TimelinePoint } from './timeline'
 import { demoTimeline, demoStartDate, demoEndDate } from './demoTimeline'
 import { selectPlacesYear, type PlaceEntry } from './places'
@@ -48,6 +48,25 @@ function App() {
   const pointsById = useMemo(() => new Map(importedPoints.map(point => [point.id, point])), [importedPoints])
   const suspectPointIds = useMemo(() => new Set(dataset.excluded.map(entry => entry.point.id)), [dataset])
   const [activeTab, setActiveTab] = useState<ActiveTab>('map')
+  const mainNav = useRef<HTMLElement>(null)
+  useLayoutEffect(() => {
+    const nav = mainNav.current
+    const current = nav?.querySelector<HTMLButtonElement>('[aria-current="page"]')
+    if (!nav || !current) return
+
+    function positionIndicator() {
+      if (!nav || !current) return
+      const navBounds = nav.getBoundingClientRect()
+      const tabBounds = current.getBoundingClientRect()
+      nav.style.setProperty('--nav-indicator-x', `${tabBounds.left - navBounds.left - nav.clientLeft}px`)
+      nav.style.setProperty('--nav-indicator-width', `${tabBounds.width}px`)
+    }
+
+    positionIndicator()
+    const observer = new ResizeObserver(positionIndicator)
+    for (const button of nav.children) observer.observe(button)
+    return () => observer.disconnect()
+  }, [activeTab, language])
   const [fileDialog, setFileDialog] = useState<'merge' | 'export' | null>(null)
   const [placeMode, setPlaceMode] = useState<'countries' | 'cities'>('countries')
   const [placeYear, setPlaceYear] = useState('all')
@@ -216,7 +235,7 @@ function App() {
   return (
     <main className={'app-shell' + (isDark ? ' dark' : '')} data-view={activeTab}>
       <header className="floating-toolbar">
-        <nav className="main-nav" aria-label={t.navigation}>
+        <nav ref={mainNav} className="main-nav" aria-label={t.navigation}>
           <button className={'nav-item' + (activeTab === 'map' ? ' is-current' : '')} aria-current={activeTab === 'map' ? 'page' : undefined} type="button" onClick={() => setActiveTab('map')}><Icon name="map" /><span>{t.map}</span></button>
           <button className={'nav-item' + (activeTab === 'trips' ? ' is-current' : '')} aria-current={activeTab === 'trips' ? 'page' : undefined} type="button" onClick={() => { setPlacesRequested(true); setTripsRequested(true); setActiveTab('trips') }}><Icon name="route" /><span>{t.trips}</span></button>
           <button className={'nav-item' + (activeTab === 'places' ? ' is-current' : '')} aria-current={activeTab === 'places' ? 'page' : undefined} type="button" onClick={() => { setPlacesRequested(true); setActiveTab('places') }}><Icon name="globe" /><span>{t.places}</span></button>

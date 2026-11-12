@@ -59,7 +59,7 @@ export default function SettingsMenu({ language, distanceUnits, isDark, mapBackg
         onClick={open ? onToggleTheme : () => setOpen(true)}>
         <Icon name={open ? (isDark ? 'sun' : 'moon') : 'settings'} />
       </button>
-      <div id={controlsId} className="settings-options" hidden={!open}>
+      <div id={controlsId} className="settings-options" inert={!open}>
         <div className="toolbar-switch settings-units" role="group" aria-label={t.distanceUnits}>
           <button type="button" aria-label={t.metric} title={t.metric} aria-pressed={distanceUnits === 'metric'} onClick={() => onDistanceUnitsChange('metric')}>km</button>
           <button type="button" aria-label={t.imperial} title={t.imperial} aria-pressed={distanceUnits === 'imperial'} onClick={() => onDistanceUnitsChange('imperial')}>mi</button>
