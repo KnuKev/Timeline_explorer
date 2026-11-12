@@ -4,8 +4,6 @@
 .trips-intro { margin: 8px 0 28px; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
 .trips-sample { display: inline-flex; padding: 5px 8px; border-radius: 6px; background: var(--surface-muted); color: var(--text-secondary); font-size: 10px; font-weight: 500; letter-spacing: 0; }
 .trips-select { display: flex; flex: 0 0 auto; flex-direction: column; gap: 6px; }
-.trips-heading .trips-select { flex-direction: row; align-items: center; gap: 8px; }
-.trips-heading .trips-select select { min-width: 0; }
 .trips-select > span { color: var(--text-secondary); font-size: 10px; }
 .trips-select select { min-width: 160px; height: 39px; padding: 0 32px 0 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text); font-family: inherit; font-size: 12px; font-weight: 500; cursor: pointer; }
 .trips-select select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
@@ -124,7 +122,7 @@
 .trips-spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: trips-spin .8s linear infinite; }
 @keyframes trips-spin { to { transform: rotate(360deg); } }
 
-@media (min-width: 1200px) {
+@media (min-width: 1320px) {
   .trips-page { padding-top: var(--workspace-gap); }
 }
 @media (max-width: 1150px) {

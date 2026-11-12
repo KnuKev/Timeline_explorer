@@ -1,7 +1,7 @@
 import { memo, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import type { StatisticsAnalysis, StatisticsPeriod } from './statistics'
-import { locales, type Language } from './i18n'
-import { formatCalendarDate, formatDistance, formatPlaceDate } from './formatting'
+import { locales, translations, type Language } from './i18n'
+import { distanceInUnits, distanceUnit, formatCalendarDate, formatDistance, formatLargeDistance, formatPlaceDate, type DistanceUnits } from './formatting'
 import { statisticsTranslations } from './statisticsI18n'
 import Icon from './Icon'
 import MoonIllustration from './MoonIllustration'
@@ -13,11 +13,13 @@ type Props = {
   error?: string
   language: Language
   isDemo?: boolean
+  distanceUnits?: DistanceUnits
   onRetry: () => void
   onOpenRange: (from: string, to: string) => void
 }
 type Copy = typeof statisticsTranslations.nb
 type PeriodProps = { period: StatisticsPeriod; language: Language; t: Copy }
+type DistancePeriodProps = PeriodProps & { distanceUnits: DistanceUnits }
 
 // Approximate lunar circumference from NASA/JPL's mean radius (2πr).
 // https://ssd.jpl.nasa.gov/sats/phys_par/
@@ -41,9 +43,9 @@ function CardHeading({ title, subtitle, children }: { title: string; subtitle: s
   return <div className="statistics-card-heading"><div><h2>{title}</h2><p>{subtitle}</p></div>{children}</div>
 }
 
-const Overview = memo(function Overview({ period, language, t }: PeriodProps) {
+const Overview = memo(function Overview({ period, language, t, distanceUnits }: DistancePeriodProps) {
   const locale = locales[language]
-  const label = formatDistance(period.distanceKm, locale)
+  const label = formatDistance(period.distanceKm, locale, distanceUnits)
   const separator = label.lastIndexOf(' ')
   return <div className="statistics-overview" aria-label={t.overview}>
     <div className="statistics-distance"><span><Icon name="route" />{t.distance}</span><strong>{separator < 0 ? label : label.slice(0, separator)} <small>{separator < 0 ? '' : label.slice(separator + 1)}</small></strong></div>
@@ -53,7 +55,7 @@ const Overview = memo(function Overview({ period, language, t }: PeriodProps) {
   </div>
 })
 
-const TransportChart = memo(function TransportChart({ period, language, t }: PeriodProps) {
+const TransportChart = memo(function TransportChart({ period, language, t, distanceUnits }: DistancePeriodProps) {
   const [unit, setUnit] = useState<'distance' | 'time'>('distance')
   const locale = locales[language]
   const categories = [
@@ -71,13 +73,14 @@ const TransportChart = memo(function TransportChart({ period, language, t }: Per
   const unclassified = Math.max(0, unit === 'distance' ? other?.distanceKm ?? 0 : other?.minutes ?? 0)
   const total = recognised + unclassified
   const coverage = (total > 0 ? recognised / total : 0).toLocaleString(locale, { style: 'percent', maximumFractionDigits: 0 })
-  const format = (value: number) => unit === 'distance'
-    ? `${value.toLocaleString(locale, { maximumFractionDigits: 1 })} km`
-    : minutesLabel(value, locale, t)
+  const format = (value: number) => {
+    if (unit === 'time') return minutesLabel(value, locale, t)
+    return value === 0 ? formatLargeDistance(value, locale, distanceUnits) : formatDistance(value, locale, distanceUnits)
+  }
   return <article className="statistics-card statistics-transport">
     <CardHeading title={t.transport} subtitle={unit === 'distance' ? t.transportDistance : t.transportTime}>
       <div className="statistics-switch" role="group" aria-label={t.transportUnit}>
-        <button type="button" aria-pressed={unit === 'distance'} onClick={() => setUnit('distance')}>km</button>
+        <button type="button" aria-pressed={unit === 'distance'} onClick={() => setUnit('distance')}>{distanceUnit(distanceUnits)}</button>
         <button type="button" aria-pressed={unit === 'time'} onClick={() => setUnit('time')}>{t.transportHours}</button>
       </div>
     </CardHeading>
@@ -94,13 +97,13 @@ const TransportChart = memo(function TransportChart({ period, language, t }: Per
   </article>
 })
 
-const HumanPowered = memo(function HumanPowered({ period, language, t }: PeriodProps) {
+const HumanPowered = memo(function HumanPowered({ period, language, t, distanceUnits }: DistancePeriodProps) {
   const locale = locales[language]
   const distance = Number.isFinite(period.humanPoweredDistanceKm) ? Math.max(0, period.humanPoweredDistanceKm) : 0
   const laps = distance / MOON_CIRCUMFERENCE_KM
   const ratio = laps > 0 && laps < 0.01 ? `<${(0.01).toLocaleString(locale)}` : laps.toLocaleString(locale, { maximumFractionDigits: 2, ...(laps >= 1000 ? { notation: 'compact' as const } : {}) })
-  const distanceLabel = formatDistance(distance, locale)
-  const circumferenceLabel = `${MOON_CIRCUMFERENCE_KM.toLocaleString(locale, { maximumFractionDigits: 0 })} km`
+  const distanceLabel = formatDistance(distance, locale, distanceUnits)
+  const circumferenceLabel = formatLargeDistance(MOON_CIRCUMFERENCE_KM, locale, distanceUnits, 0)
   const progress = Math.min(1, laps) * 100
   return <article className="statistics-card statistics-human-powered comparison-moon">
     <CardHeading title={t.humanPowered} subtitle={t.humanPoweredIntro} />
@@ -118,7 +121,7 @@ const HumanPowered = memo(function HumanPowered({ period, language, t }: PeriodP
   </article>
 })
 
-function MonthlyChart({ data, period, year, language, t, onOpenRange }: PeriodProps & { data: StatisticsAnalysis; year: number | null; onOpenRange: Props['onOpenRange'] }) {
+function MonthlyChart({ data, period, year, language, t, distanceUnits, onOpenRange }: DistancePeriodProps & { data: StatisticsAnalysis; year: number | null; onOpenRange: Props['onOpenRange'] }) {
   const [chosenMonth, setChosenMonth] = useState<number | null>(null)
   const locale = locales[language]
   const monthNames = useMemo(() => {
@@ -128,15 +131,15 @@ function MonthlyChart({ data, period, year, language, t, onOpenRange }: PeriodPr
   const months = Array.from({ length: 12 }, (_, index) => period.monthly.find(entry => entry.month === index + 1) ?? { month: index + 1, distanceKm: 0, recordedDays: 0 })
   const maximum = Math.max(1, ...months.map(month => month.distanceKm))
   const axisFormat = new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 })
-  const valueLabel = (value: number) => formatDistance(value, locale)
+  const valueLabel = (value: number) => formatDistance(value, locale, distanceUnits)
   const open = (month: number) => {
     if (year !== null) onOpenRange(...monthRange(year, month))
     else setChosenMonth(current => current === month ? null : month)
   }
   return <article className="statistics-card statistics-monthly">
-    <CardHeading title={t.monthly} subtitle={t.monthlyIntro}><span className="statistics-chart-unit" title={t.kilometers}>km</span></CardHeading>
+    <CardHeading title={t.monthly} subtitle={t.monthlyIntro}><span className="statistics-chart-unit" title={distanceUnits === 'imperial' ? t.miles : t.kilometers}>{distanceUnit(distanceUnits)}</span></CardHeading>
     <div className="statistics-bar-chart">
-      <div className="statistics-chart-axis" aria-hidden="true"><span>{axisFormat.format(maximum)}</span><span>{axisFormat.format(maximum / 2)}</span><span>0</span></div>
+      <div className="statistics-chart-axis" aria-hidden="true"><span>{axisFormat.format(distanceInUnits(maximum, distanceUnits))}</span><span>{axisFormat.format(distanceInUnits(maximum / 2, distanceUnits))}</span><span>0</span></div>
       <div className="statistics-month-bars">
         {months.map(month => <button type="button" key={month.month} className={'statistics-month-button' + (year === null && chosenMonth === month.month ? ' selected' : '')} disabled={month.recordedDays === 0 && month.distanceKm === 0}
           title={`${monthNames[month.month - 1]}${year === null ? '' : ` ${year}`}: ${valueLabel(month.distanceKm)}`}
@@ -191,7 +194,7 @@ const MovementClock = memo(function MovementClock({ period, language, t }: Perio
   </article>
 })
 
-function Calendar({ period, year, years, language, t, onOpenRange }: PeriodProps & { year: number | null; years: number[]; onOpenRange: Props['onOpenRange'] }) {
+function Calendar({ period, year, years, language, t, distanceUnits, onOpenRange }: DistancePeriodProps & { year: number | null; years: number[]; onOpenRange: Props['onOpenRange'] }) {
   const [ownYear, setOwnYear] = useState<number | null>(null)
   const calendarYear = year ?? (ownYear !== null && years.includes(ownYear) ? ownYear : Math.max(...years))
   const locale = locales[language]
@@ -219,7 +222,15 @@ function Calendar({ period, year, years, language, t, onOpenRange }: PeriodProps
     const formatter = new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone: 'UTC' })
     return Array.from({ length: 7 }, (_, index) => formatter.format(new Date(Date.UTC(2024, 0, 1 + index))))
   }, [locale])
-  const level = (distance: number | undefined) => distance === undefined ? 'unknown' : distance === 0 ? '0' : distance < 1 ? '1' : distance < 10 ? '2' : distance < 50 ? '3' : distance < 200 ? '4' : '5'
+  const limits = distanceUnits === 'imperial' ? [1, 6, 30, 125] : [1, 10, 50, 200]
+  const unit = distanceUnit(distanceUnits)
+  const level = (kilometers: number | undefined) => {
+    if (kilometers === undefined) return 'unknown'
+    if (kilometers === 0) return '0'
+    const distance = distanceInUnits(kilometers, distanceUnits)
+    const band = limits.findIndex(limit => distance < limit)
+    return band === -1 ? 5 : band + 1
+  }
   return <article className="statistics-card statistics-calendar">
     <CardHeading title={t.calendar} subtitle={t.calendarIntro}>{year === null ? <label className="statistics-select compact"><span>{t.calendarYear}</span><select aria-label={t.calendarYear} value={calendarYear} onChange={event => setOwnYear(Number(event.target.value))}>{[...years].sort((a, b) => b - a).map(value => <option key={value} value={value}>{value}</option>)}</select></label> : <span className="statistics-year-label">{year}</span>}</CardHeading>
     <div className="statistics-calendar-scroll">
@@ -227,13 +238,14 @@ function Calendar({ period, year, years, language, t, onOpenRange }: PeriodProps
         {calendar.months.map((month, index) => <span className="statistics-calendar-month" key={index} style={{ gridColumn: month.week + 2, gridRow: 1 }}>{month.label}</span>)}
         {[0, 2, 4].map(day => <span key={day} className="statistics-calendar-weekday" style={{ gridColumn: 1, gridRow: day + 2 }}>{weekdays[day]}</span>)}
         {calendar.days.map(day => {
-          const label = `${formatCalendarDate(day.date, locale)} · ${day.distance === undefined ? t.noData : formatDistance(day.distance, locale)}`
+          const label = `${formatCalendarDate(day.date, locale)} · ${day.distance === undefined ? t.noData : formatDistance(day.distance, locale, distanceUnits)}`
           return <button type="button" key={day.date} data-date={day.date} className={`statistics-calendar-day level-${level(day.distance)}`} style={{ gridColumn: day.week + 2, gridRow: day.weekday + 2 }} disabled={day.distance === undefined} title={label} aria-label={`${label}${day.distance === undefined ? '' : `. ${t.openDay}`}`} onClick={() => onOpenRange(day.date, day.date)} />
         })}
       </div>
     </div>
     <div className="statistics-calendar-footer"><span><strong>{calendar.recorded.toLocaleString(locale)}</strong> {t.calendarRecorded}</span><div className="statistics-heat-legend" aria-label={t.distance}>{[
-      ['unknown', t.noData], ['0', t.noMovement], ['1', '<1'], ['2', '1–10'], ['3', '10–50'], ['4', '50–200'], ['5', '200+ km'],
+      ['unknown', t.noData], ['0', `0 ${unit}`], ['1', `<${limits[0]}`],
+      ...limits.slice(1).map((limit, index) => [String(index + 2), `${limits[index]}–${limit}`]), ['5', `${limits.at(-1)}+ ${unit}`],
     ].map(([value, label]) => <span key={value}><i className={`level-${value}`} />{label}</span>)}</div></div>
     {calendar.longest && calendar.longest.distance! > 0 && <button type="button" className="statistics-longest" onClick={() => onOpenRange(calendar.longest!.date, calendar.longest!.date)}><span>{t.longestDay} <strong>{formatPlaceDate(calendar.longest.date, locale)}</strong></span><strong>{formatDistance(calendar.longest.distance!, locale)} <Icon name="arrow" /></strong></button>}
     <p className="statistics-note">{t.calendarHint}</p>
@@ -272,7 +284,7 @@ function NewPlaces({ period, language, t, onOpenRange }: PeriodProps & { onOpenR
   </article>
 }
 
-function StatisticsContent({ data, language, isDemo, onOpenRange }: Omit<Props, 'data' | 'loading' | 'error' | 'onRetry'> & { data: StatisticsAnalysis }) {
+function StatisticsContent({ data, language, isDemo, distanceUnits = 'metric', onOpenRange }: Omit<Props, 'data' | 'loading' | 'error' | 'onRetry'> & { data: StatisticsAnalysis }) {
   const t = statisticsTranslations[language]
   const [selectedYear, setSelectedYear] = useState<number | null>(null)
   const year = selectedYear !== null && data.years.includes(selectedYear) ? selectedYear : null
@@ -281,21 +293,21 @@ function StatisticsContent({ data, language, isDemo, onOpenRange }: Omit<Props, 
   return <>
     <header className="report-heading statistics-heading">
       <h1>{t.title}{isDemo && <span className="statistics-sample">{t.sample}</span>}</h1>
-      <label className="statistics-select">
-        <span>{t.range}</span>
+      <label className="report-period">
+        <span>{translations[language].reportPeriod}</span>
         <select value={year ?? 'all'} onChange={event => setSelectedYear(event.target.value === 'all' ? null : Number(event.target.value))}>
           <option value="all">{t.all}</option>
           {years.map(value => <option key={value} value={value}>{value}</option>)}
         </select>
       </label>
     </header>
-    <Overview period={period} language={language} t={t} />
+    <Overview distanceUnits={distanceUnits} period={period} language={language} t={t} />
     <div className="statistics-layout">
-      <MonthlyChart data={data} period={period} year={year} language={language} t={t} onOpenRange={onOpenRange} />
+      <MonthlyChart distanceUnits={distanceUnits} data={data} period={period} year={year} language={language} t={t} onOpenRange={onOpenRange} />
       <MovementClock period={period} language={language} t={t} />
-      {years.length > 0 && <Calendar period={period} year={year} years={years} language={language} t={t} onOpenRange={onOpenRange} />}
-      <TransportChart period={period} language={language} t={t} />
-      <HumanPowered period={period} language={language} t={t} />
+      {years.length > 0 && <Calendar distanceUnits={distanceUnits} period={period} year={year} years={years} language={language} t={t} onOpenRange={onOpenRange} />}
+      <TransportChart distanceUnits={distanceUnits} period={period} language={language} t={t} />
+      <HumanPowered distanceUnits={distanceUnits} period={period} language={language} t={t} />
       <Patterns period={period} language={language} t={t} onOpenRange={onOpenRange} />
       <NewPlaces period={period} language={language} t={t} onOpenRange={onOpenRange} />
     </div>

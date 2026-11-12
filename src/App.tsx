@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { parseTimeline, type TimelinePoint } from './timeline'
 import { demoTimeline, demoStartDate, demoEndDate } from './demoTimeline'
-import type { PlaceEntry } from './places'
+import { selectPlacesYear, type PlaceEntry } from './places'
 import type { TimelineTrip } from './trips'
 import { getStoredHomeRadius, homeRadiusStorageKey, normalizeHomeRadius } from './tripSettings'
 import { getStoredLanguage, languageStorageKey, locales, pointLabel, translations, type Language } from './i18n'
@@ -14,7 +14,7 @@ import { getMapColors } from './mapAppearance'
 import PointList from './PointList'
 import Icon from './Icon'
 import { mergeTranslations } from './mergeI18n'
-import { formatCalendarDate, formatPlaceDate, formatPointInterval, formatDistance } from './formatting'
+import { distanceUnitsStorageKey, formatCalendarDate, formatPlaceDate, formatPointInterval, formatDistance, formatLargeDistance, getStoredDistanceUnits } from './formatting'
 import './App.css'
 
 type DateMode = 'day' | 'period'
@@ -28,6 +28,7 @@ const demoTimelineUrl = new URL('./data/fictional-timeline.json', import.meta.ur
 
 function App() {
   const [language, setLanguage] = useState<Language>(getStoredLanguage)
+  const [distanceUnits, setDistanceUnits] = useState(getStoredDistanceUnits)
   const t = translations[language]
   const locale = locales[language]
   const regionNames = useMemo(() => new Intl.DisplayNames([locale], { type: 'region' }), [locale])
@@ -37,6 +38,7 @@ function App() {
     document.documentElement.lang = language
     try { localStorage.setItem(languageStorageKey, language) } catch { /* Language switching also works when storage is unavailable. */ }
   }, [language])
+  useEffect(() => { try { localStorage.setItem(distanceUnitsStorageKey, distanceUnits) } catch { /* Storage is optional. */ } }, [distanceUnits])
   const [dataset, setDataset] = useState(() => prepareTimeline(parseTimeline(demoTimeline)))
   const importedPoints = dataset.points
   const [showSuspectPoints, setShowSuspectPoints] = useState(false)
@@ -47,6 +49,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('map')
   const [mergeOpen, setMergeOpen] = useState(false)
   const [placeMode, setPlaceMode] = useState<'countries' | 'cities'>('countries')
+  const [placeYear, setPlaceYear] = useState('all')
   const [placesRequested, setPlacesRequested] = useState(false)
   const [statisticsRequested, setStatisticsRequested] = useState(false)
   const [tripsRequested, setTripsRequested] = useState(false)
@@ -68,18 +71,24 @@ function App() {
   useEffect(() => { try { localStorage.setItem('timeline-explorer-dark', String(isDark)) } catch { /* Storage is optional. */ } }, [isDark])
   useEffect(() => { try { localStorage.setItem(homeRadiusStorageKey, String(homeRadiusKm)) } catch { /* The radius also works without storage. */ } }, [homeRadiusKm])
 
-
   const availableDays = useMemo(() => dataset.days.filter(day => showSuspectPoints || day.cleanCount > 0).map(day => day.day), [dataset, showSuspectPoints])
   const visiblePoints = useMemo(() => selectTimelineRange(dataset, dateMode === 'day' ? selectedDate : fromDate, dateMode === 'day' ? selectedDate : toDate, showSuspectPoints), [dataset, dateMode, selectedDate, fromDate, toDate, showSuspectPoints])
+
+  const placeYears = useMemo(() => [...new Set(dataset.days.map(day => day.day.slice(0, 4)))].reverse(), [dataset])
+  const selectedPlaces = useMemo(() => {
+    if (!placeAnalysis || placeYear === 'all') return placeAnalysis
+    const points = selectTimelineRange(dataset, `${placeYear}-01-01`, `${placeYear}-12-31`, showSuspectPoints)
+    return selectPlacesYear(placeAnalysis, placeYear, new Set(points.map(point => point.id)))
+  }, [dataset, placeAnalysis, placeYear, showSuspectPoints])
 
   const mapPoints = useMemo(() => {
     if (tripScope) return tripScope.pointIds.map(id => pointsById.get(id)).filter((point): point is TimelinePoint => Boolean(point))
     if (!placeScope || !placeViewEnabled) return visiblePoints
-    const scopedPlaces = placeScope.kind === 'country' ? placeAnalysis?.countries : placeAnalysis?.cities
+    const scopedPlaces = placeScope.kind === 'country' ? selectedPlaces?.countries : selectedPlaces?.cities
     const ids = scopedPlaces?.find(place => place.key === placeScope.key)?.pointIds ?? []
     return ids.map(id => pointsById.get(id)).filter((point): point is TimelinePoint => Boolean(point))
-  }, [tripScope, placeAnalysis, placeScope, placeViewEnabled, pointsById, visiblePoints])
-  const places = placeMode === 'countries' ? placeAnalysis?.countries ?? [] : placeAnalysis?.cities ?? []
+  }, [tripScope, selectedPlaces, placeScope, placeViewEnabled, pointsById, visiblePoints])
+  const places = placeMode === 'countries' ? selectedPlaces?.countries ?? [] : selectedPlaces?.cities ?? []
   const mainPlaces = places.filter((place) => place.pointCount >= 10)
   const fewerPlaces = places.filter((place) => place.pointCount < 10)
   const placeName = (place: PlaceEntry) => placeMode === 'countries' ? countryName(place.countryCode, place.name) : place.name
@@ -89,6 +98,13 @@ function App() {
   const renderPlaceCard = (place: PlaceEntry, index: number) => (
     <button key={place.key} type="button" className="place-card" onClick={() => {
       setPlaceScope({ kind: placeMode === 'countries' ? 'country' : 'city', key: place.key, name: place.name, countryName: place.countryName, countryCode: place.countryCode })
+      if (placeYear !== 'all') {
+        const dates = availableDays.filter(day => day.startsWith(placeYear + '-'))
+        setFromDate(dates[0]!)
+        setToDate(dates.at(-1)!)
+        setSelectedDate(dates[0]!)
+        setDateMode('period')
+      }
       setPlaceViewEnabled(true)
       setTripScope(null)
       setActiveTab('map')
@@ -105,14 +121,14 @@ function App() {
   const route = useMemo(() => buildRouteSegments(mapPoints, importedPoints), [mapPoints, importedPoints])
   const hasFlights = useMemo(() => route.segments.some(segment => segment.transport === 'flight'), [route])
   const mapDistance = route.distanceKm
-  const distanceLabel = formatDistance(mapDistance, locale)
+  const distanceLabel = formatDistance(mapDistance, locale, distanceUnits)
   const distanceSeparator = distanceLabel.lastIndexOf(' ')
   const distanceValue = distanceSeparator < 0 ? distanceLabel : distanceLabel.slice(0, distanceSeparator)
   const distanceUnit = distanceSeparator < 0 ? '' : distanceLabel.slice(distanceSeparator + 1)
   const pointGroups = useMemo(() => isPointListExpanded ? groupTimelineSelection(dataset, mapPoints,
-    placeScope && placeViewEnabled ? undefined : dateMode === 'day' ? selectedDate : fromDate,
-    placeScope && placeViewEnabled ? undefined : dateMode === 'day' ? selectedDate : toDate) : [],
-    [dataset, mapPoints, isPointListExpanded, placeScope, placeViewEnabled, dateMode, selectedDate, fromDate, toDate])
+    placeScope && placeViewEnabled ? (placeYear === 'all' ? undefined : `${placeYear}-01-01`) : dateMode === 'day' ? selectedDate : fromDate,
+    placeScope && placeViewEnabled ? (placeYear === 'all' ? undefined : `${placeYear}-12-31`) : dateMode === 'day' ? selectedDate : toDate) : [],
+    [dataset, mapPoints, isPointListExpanded, placeYear, placeScope, placeViewEnabled, dateMode, selectedDate, fromDate, toDate])
   const handleLoaded = useCallback((next: TimelineDataset, filename: string) => {
     const days = next.days.filter(day => day.cleanCount > 0)
     if (!days.length) throw new Error('No supported calendar dates in this import')
@@ -122,6 +138,7 @@ function App() {
     weekStartDate.setUTCDate(weekStartDate.getUTCDate() - 6)
     const weekStart = weekStartDate.toISOString().slice(0, 10)
     setDataset(next)
+    setPlaceYear('all')
     setShowSuspectPoints(false)
     setQualityDismissed(false)
     setIsDemo(false)
@@ -205,7 +222,11 @@ function App() {
 
         <div className="display-controls">
           <button className="toolbar-button merge-toggle" type="button" title={mergeTranslations[language].title} aria-label={mergeTranslations[language].title} aria-haspopup="dialog" onClick={() => setMergeOpen(true)}><Icon name="merge" /></button>
-          <div className="language-switch" role="group" aria-label={t.language}>
+          <div className="toolbar-switch" role="group" aria-label={t.distanceUnits}>
+            <button type="button" aria-label={t.metric} title={t.metric} aria-pressed={distanceUnits === 'metric'} onClick={() => setDistanceUnits('metric')}>km</button>
+            <button type="button" aria-label={t.imperial} title={t.imperial} aria-pressed={distanceUnits === 'imperial'} onClick={() => setDistanceUnits('imperial')}>mi</button>
+          </div>
+          <div className="toolbar-switch" role="group" aria-label={t.language}>
             <button type="button" lang="nb" aria-label="Norsk bokmål" aria-pressed={language === 'nb'} onClick={() => setLanguage('nb')}>NO</button>
             <button type="button" lang="en" aria-label="English" aria-pressed={language === 'en'} onClick={() => setLanguage('en')}>EN</button>
           </div>
@@ -220,30 +241,47 @@ function App() {
           <header className="places-page-heading">
             <div className="report-heading">
               <h1>{t.places}</h1>
-              <div className="places-total">
-                <strong>{places.length.toLocaleString(locale)}</strong>
-                <span>{placeMode === 'countries' ? t.countriesRegistered : t.citiesRegistered}</span>
-              </div>
+              <label className="report-period">
+                <span>{t.reportPeriod}</span>
+                <select value={placeYear} onChange={event => {
+                  setPlaceYear(event.target.value)
+                  setPlaceScope(null)
+                  setPlaceViewEnabled(false)
+                  setSelectedPointId(null)
+                }}>
+                  <option value="all">{t.allTime}</option>
+                  {placeYears.map(year => <option key={year} value={year}>{Number(year)}</option>)}
+                </select>
+              </label>
             </div>
             <p>{t.placesIntro}</p>
           </header>
-          <div className="places-tabs" role="tablist" aria-label={t.placeType}><button type="button" role="tab" aria-selected={placeMode === 'countries'} className={placeMode === 'countries' ? 'selected' : ''} onClick={() => setPlaceMode('countries')}>{t.countries} <span>{placeAnalysis?.countries.length.toLocaleString(locale) ?? '–'}</span></button><button type="button" role="tab" aria-selected={placeMode === 'cities'} className={placeMode === 'cities' ? 'selected' : ''} onClick={() => setPlaceMode('cities')}>{t.cities} <span>{placeAnalysis?.cities.length.toLocaleString(locale) ?? '–'}</span></button></div>
+          <div className="places-controls">
+            <div className="places-tabs" role="tablist" aria-label={t.placeType}>
+              <button type="button" role="tab" aria-selected={placeMode === 'countries'} className={placeMode === 'countries' ? 'selected' : ''} onClick={() => setPlaceMode('countries')}>{t.countries} <span>{selectedPlaces?.countries.length.toLocaleString(locale) ?? '–'}</span></button>
+              <button type="button" role="tab" aria-selected={placeMode === 'cities'} className={placeMode === 'cities' ? 'selected' : ''} onClick={() => setPlaceMode('cities')}>{t.cities} <span>{selectedPlaces?.cities.length.toLocaleString(locale) ?? '–'}</span></button>
+            </div>
+            {selectedPlaces && <div className="places-total">
+              <strong>{places.length.toLocaleString(locale)}</strong>
+              <span>{placeMode === 'countries' ? t.countriesRegistered : t.citiesRegistered}</span>
+            </div>}
+          </div>
           {qualityNotice}
           {placesLoading && <div className="places-message"><span className="places-spinner" /> {t.analysing}</div>}{placesError && <div className="places-message places-error" role="alert">{t[placesError]}<button type="button" className="primary-button" onClick={retryPlaces}>{t.retry}</button></div>}
-          {!placesLoading && !placesError && places.length === 0 && <div className="places-empty"><Icon name="globe" /><strong>{t.noPlaces}</strong><p>{t.importForPlaces}</p><button type="button" className="primary-button" onClick={() => setActiveTab('map')}>{t.goToMap}</button></div>}
+          {!placesLoading && !placesError && places.length === 0 && <div className="places-empty"><Icon name="globe" /><strong>{placeYear === 'all' ? t.noPlaces : t.noPlacesForYear}</strong>{placeYear === 'all' && <><p>{t.importForPlaces}</p><button type="button" className="primary-button" onClick={() => setActiveTab('map')}>{t.goToMap}</button></>}</div>}
           {!placesLoading && !placesError && mainPlaces.length > 0 && <div className="places-grid">{mainPlaces.map(renderPlaceCard)}</div>}
           {!placesLoading && !placesError && fewerPlaces.length > 0 && <details key={placeMode} className="fewer-places"><summary><span>{placeMode === 'countries' ? t.fewerCountries : t.fewerPlaces}</span><span className="count-badge">{fewerPlaces.length.toLocaleString(locale)}</span></summary><p>{t.fewerPlacesHint}</p><div className="places-grid">{fewerPlaces.map((place, index) => renderPlaceCard(place, mainPlaces.length + index))}</div></details>}
-          <footer className="places-attribution">{t.citySuggestions} <a href="https://www.geonames.org/" target="_blank" rel="noreferrer">GeoNames</a> (CC BY 4.0) · {t.geodataDetails}</footer>
+          <footer className="places-attribution">{t.citySuggestions} <a href="https://www.geonames.org/" target="_blank" rel="noreferrer">GeoNames</a> (CC BY 4.0) · {t.geodataDetails.replace('{distance}', formatLargeDistance(30, locale, distanceUnits))}</footer>
         </div>
       )}
       {tripsRequested && <div className="trips-workspace" hidden={activeTab !== 'trips'}>
         <Suspense fallback={<div className="places-message" role="status"><span className="places-spinner" />{t.analysing}</div>}>
-          <Trips data={trips} loading={tripsLoading} error={placesError ? t[placesError] : undefined} language={language} isDemo={isDemo} homeRadiusKm={homeRadiusKm} onHomeRadiusChange={changeHomeRadius} onRetry={retryPlaces} onOpenTrip={openTrip} />
+          <Trips distanceUnits={distanceUnits} data={trips} loading={tripsLoading} error={placesError ? t[placesError] : undefined} language={language} isDemo={isDemo} homeRadiusKm={homeRadiusKm} onHomeRadiusChange={changeHomeRadius} onRetry={retryPlaces} onOpenTrip={openTrip} />
         </Suspense>
       </div>}
       {statisticsRequested && <div className="statistics-workspace" hidden={activeTab !== 'statistics'}>
         <Suspense fallback={<div className="places-message" role="status"><span className="places-spinner" />{t.analysing}</div>}>
-          <Statistics data={statistics} loading={statisticsLoading} error={placesError ? t[placesError] : undefined} language={language} isDemo={isDemo} onRetry={retryPlaces} onOpenRange={openStatisticsRange} />
+          <Statistics distanceUnits={distanceUnits} data={statistics} loading={statisticsLoading} error={placesError ? t[placesError] : undefined} language={language} isDemo={isDemo} onRetry={retryPlaces} onOpenRange={openStatisticsRange} />
         </Suspense>
       </div>}
       <div className="workspace" hidden={activeTab !== 'map'}>
@@ -335,7 +373,7 @@ function App() {
           <section className="summary-section">
             <div className="section-title-row">
               <h2>{t.summary}</h2>
-              <span className="summary-period">{tripScope ? t.selectedTrip : placeViewEnabled && placeScope ? t.wholeHistory : dateMode === 'day' ? t.selectedDay : t.selectedPeriod}</span>
+              <span className="summary-period">{tripScope ? t.selectedTrip : placeViewEnabled && placeScope ? (placeYear === 'all' ? t.wholeHistory : placeYear) : dateMode === 'day' ? t.selectedDay : t.selectedPeriod}</span>
             </div>
             <div className="summary-grid">
               <div className="summary-card">

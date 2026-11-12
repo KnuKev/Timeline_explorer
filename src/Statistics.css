@@ -194,7 +194,7 @@
 .statistics-state > .ui-icon { width: 28px; height: 28px; color: var(--accent); }
 .statistics-state .places-spinner { flex-basis: 24px; width: 24px; height: 24px; border-width: 2px; }
 
-@media (min-width: 1200px) {
+@media (min-width: 1320px) {
   .statistics-page { padding-top: var(--workspace-gap); }
 }
 @media (max-width: 1100px) {

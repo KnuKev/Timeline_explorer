@@ -163,8 +163,23 @@ export function analysePlaces(points: TimelinePoint[], cities: CityReference[], 
     key: identity.key, name: identity.name, countryCode: identity.countryCode,
     ...(identity.countryName === undefined ? {} : { countryName: identity.countryName }),
     days: days.size, dates: Array.from(days).sort().reverse(), pointCount: ids.length, pointIds: ids,
-  })).sort((a, b) => b.days - a.days || b.pointCount - a.pointCount || a.name.localeCompare(b.name, 'no'))
+  })).sort(comparePlaces)
   return { countries: entries(countryAggregates), cities: entries(cityAggregates) }
+}
+
+function comparePlaces(a: PlaceEntry, b: PlaceEntry): number {
+  return b.days - a.days || b.pointCount - a.pointCount || a.name.localeCompare(b.name, 'no')
+}
+
+export function selectPlacesYear(analysis: PlaceAnalysis, year: string, selectedPointIds: ReadonlySet<string>): PlaceAnalysis {
+  const select = (entries: PlaceEntry[]) => entries.flatMap(entry => {
+    const dates = entry.dates.filter(date => date.startsWith(year + '-'))
+    if (!dates.length) return []
+    const pointIds = entry.pointIds.filter(id => selectedPointIds.has(id))
+    if (!pointIds.length) return []
+    return [{ ...entry, dates, days: dates.length, pointIds, pointCount: pointIds.length }]
+  }).sort(comparePlaces)
+  return { countries: select(analysis.countries), cities: select(analysis.cities) }
 }
 
 export type { CityReference, PlaceAnalysis, PlaceEntry }

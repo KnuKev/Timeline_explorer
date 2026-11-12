@@ -3,12 +3,12 @@ const nb = {
   all: 'Hele historikken', year: 'År', sample: 'Eksempeldata', overview: 'Oversikt',
   distance: 'Estimert distanse', countries: 'Land', cities: 'Byer og områder', recordedDays: 'Registrerte dager',
   monthly: 'Måned for måned', monthlyIntro: 'Reisedistanse fordelt på årets måneder.',
-  kilometers: 'kilometer',
+  kilometers: 'kilometer', miles: 'engelske mil',
   combinedMonths: 'Hver søyle summerer samme måned på tvers av årene. Velg en søyle for å åpne et bestemt år.',
   openMonth: 'Åpne måneden på kartet', chooseMonthYear: 'Velg året du vil åpne', close: 'Lukk',
   monthlyEmpty: 'Ingen registreringer i denne perioden.',
   calendar: 'Året i bevegelse', calendarIntro: 'Én rute per dag. Sterkere farge betyr lengre distanse.',
-  calendarYear: 'Kalenderår', noData: 'Ingen data', noMovement: '0 km',
+  calendarYear: 'Kalenderår', noData: 'Ingen data',
   calendarHint: 'Velg en dag for å utforske den på kartet. Distanse føres på ankomstdagen, i lokal tid.',
   longestDay: 'Lengste dag', calendarRecorded: 'dager med registreringer',
   clock: 'Når er du i bevegelse?', clockIntro: 'Registrert bevegelsestid gjennom døgnet.',
@@ -44,7 +44,7 @@ const nb = {
   error: 'Statistikken kunne ikke lastes.', retry: 'Prøv igjen', noStatistics: 'Ingen statistikk å vise ennå.',
   noStatisticsHint: 'Importer en Timeline-fil fra kartet for å utforske historikken din.',
   note: 'Distanser beregnes mellom registrerte punkter og inkluderer flyreiser. Manglende registreringer betyr ikke at du var i ro.',
-  range: 'Periode', page: 'Side', openDay: 'Åpne dagen på kartet',
+  page: 'Side', openDay: 'Åpne dagen på kartet',
 }
 
 const en: Record<keyof typeof nb, string> = {
@@ -52,12 +52,12 @@ const en: Record<keyof typeof nb, string> = {
   all: 'All time', year: 'Year', sample: 'Sample data', overview: 'Overview',
   distance: 'Estimated distance', countries: 'Countries', cities: 'Cities and areas', recordedDays: 'Recorded days',
   monthly: 'Month by month', monthlyIntro: 'Travel distance across the months of the year.',
-  kilometers: 'kilometres',
+  kilometers: 'kilometres', miles: 'miles',
   combinedMonths: 'Each bar combines the same month across all years. Select a bar to open a particular year.',
   openMonth: 'Open month on map', chooseMonthYear: 'Choose a year to open', close: 'Close',
   monthlyEmpty: 'No records in this period.',
   calendar: 'Your year in motion', calendarIntro: 'One square per day. A stronger colour means more distance.',
-  calendarYear: 'Calendar year', noData: 'No data', noMovement: '0 km',
+  calendarYear: 'Calendar year', noData: 'No data',
   calendarHint: 'Select a day to explore it on the map. Distance is assigned to the local arrival date.',
   longestDay: 'Longest day', calendarRecorded: 'days with records',
   clock: 'When do you move?', clockIntro: 'Recorded movement time through the day.',
@@ -93,7 +93,7 @@ const en: Record<keyof typeof nb, string> = {
   error: 'Statistics could not be loaded.', retry: 'Try again', noStatistics: 'No statistics to show yet.',
   noStatisticsHint: 'Import a Timeline file from the map to explore your history.',
   note: 'Distances are calculated between recorded points and include flights. Missing records do not mean you were stationary.',
-  range: 'Period', page: 'Page', openDay: 'Open day on map',
+  page: 'Page', openDay: 'Open day on map',
 }
 
 export const statisticsTranslations = { nb, en }

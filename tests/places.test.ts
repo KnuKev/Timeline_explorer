@@ -3,10 +3,11 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { feature } from 'topojson-client'
 import type { Topology } from 'topojson-specification'
-import { analysePlaces, type CountryFeature } from '../src/places.ts'
+import { analysePlaces, selectPlacesYear, type CountryFeature } from '../src/places.ts'
 import { createCountryLookup } from '../src/geography.ts'
 import { pointDateKeys } from '../src/pointDates.ts'
 import { parseTimeline, type TimelinePoint } from '../src/timeline.ts'
+import { prepareTimeline, selectTimelineRange } from '../src/timelineIndex.ts'
 
 const topology = JSON.parse(readFileSync(new URL('../node_modules/world-atlas/countries-10m.json', import.meta.url), 'utf8')) as Topology
 const countries = (feature(topology, topology.objects.countries!) as unknown as { features: CountryFeature[] }).features
@@ -80,4 +81,26 @@ test('mobile export import feeds Tenerife and Austrian activity days into countr
   const result = analysePlaces(points, [], codes, countries)
   assert.deepEqual(result.countries.find(country => country.countryCode === 'ES')?.dates, ['2025-01-13', '2025-01-12', '2025-01-11', '2025-01-10'])
   assert.equal(result.countries.find(country => country.countryCode === 'AT')?.days, 1)
+})
+
+
+test('a Places year keeps only its recorded days and points, including visits that began in the previous year', () => {
+  const points = [
+    point('past-fix', 28.4636, -16.2518, '2024-12-29T12:00:00Z'),
+    point('past-country', 46.6247, 14.3053, '2024-12-30T12:00:00Z'),
+    { ...point('visit', 28.4636, -16.2518, '2024-12-31T18:00:00Z'), kind: 'visit' as const, endTimestamp: '2025-01-03T00:00:00Z' },
+    point('new-fix', 28.4636, -16.2518, '2025-01-02T12:00:00Z'),
+  ]
+  const dataset = prepareTimeline(points)
+  const all = analysePlaces(dataset.cleanPoints, [{ name: 'Santa Cruz', lat: 28.4636, lng: -16.2518, countryCode: 'ES' }], codes, countries)
+  const ids = new Set(selectTimelineRange(dataset, '2025-01-01', '2025-12-31').map(point => point.id))
+  const year = selectPlacesYear(all, '2025', ids)
+  assert.deepEqual(year.countries.map(place => place.countryCode), ['ES'])
+  for (const place of [year.countries[0]!, year.cities[0]!]) {
+    assert.deepEqual(place.dates, ['2025-01-02', '2025-01-01'])
+    assert.deepEqual(place.pointIds, ['visit', 'new-fix'])
+    assert.equal(place.days, 2)
+    assert.equal(place.pointCount, 2)
+  }
+  assert.equal(all.countries.find(place => place.countryCode === 'ES')?.pointCount, 3)
 })

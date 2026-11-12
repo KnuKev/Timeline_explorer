@@ -72,10 +72,38 @@ export function formatPointInterval(point: TimelinePoint, locale: string, detail
   return Number.isFinite(end) && end > start ? formatter.formatRange(start, end) : formatter.format(start)
 }
 
-export function formatDistance(kilometers: number, locale: string): string {
-  if (!Number.isFinite(kilometers) || kilometers < 0) return '—'
-  const key = `${locale}:${kilometers < 1 ? 'meters' : 'kilometers'}`
+export type DistanceUnits = 'metric' | 'imperial'
+export const distanceUnitsStorageKey = 'timeline-explorer-distance-units'
+
+export function getStoredDistanceUnits(): DistanceUnits {
+  try { return localStorage.getItem(distanceUnitsStorageKey) === 'imperial' ? 'imperial' : 'metric' }
+  catch { return 'metric' }
+}
+
+export function distanceUnit(units: DistanceUnits): 'km' | 'mi' {
+  return units === 'imperial' ? 'mi' : 'km'
+}
+
+export function distanceInUnits(kilometers: number, units: DistanceUnits): number {
+  return units === 'imperial' ? kilometers / 1.609344 : kilometers
+}
+
+function distanceNumber(value: number, unit: string, locale: string, maximumFractionDigits: number): string {
+  const key = `${locale}:${maximumFractionDigits}`
   let formatter = numberFormatters.get(key)
-  if (!formatter) formatter = remember(numberFormatters, key, new Intl.NumberFormat(locale, { maximumFractionDigits: kilometers < 1 ? 0 : 1 }), 16)
-  return kilometers < 1 ? formatter.format(kilometers * 1_000) + ' m' : formatter.format(kilometers) + ' km'
+  if (!formatter) formatter = remember(numberFormatters, key, new Intl.NumberFormat(locale, { maximumFractionDigits }), 16)
+  return `${formatter.format(value)} ${unit}`
+}
+
+export function formatLargeDistance(kilometers: number, locale: string, units: DistanceUnits, digits = 1): string {
+  return distanceNumber(distanceInUnits(kilometers, units), distanceUnit(units), locale, digits)
+}
+
+export function formatDistance(kilometers: number, locale: string, units: DistanceUnits = 'metric'): string {
+  if (!Number.isFinite(kilometers) || kilometers < 0) return '—'
+  const distance = distanceInUnits(kilometers, units)
+  if (distance >= 1) return formatLargeDistance(kilometers, locale, units)
+  return units === 'imperial'
+    ? distanceNumber(distance * 5280, 'ft', locale, 0)
+    : distanceNumber(distance * 1000, 'm', locale, 0)
 }
