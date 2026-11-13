@@ -401,7 +401,7 @@
   .display-controls[data-open="false"] .settings-corner { inset: 0; border-radius: 50%; }
   .app-shell[data-view="map"] .settings-anchor { top: auto; bottom: calc(var(--sheet-height) + 70px); transition: bottom var(--sheet-motion); }
   .app-shell[data-view="map"] .display-controls { inset: auto 0 0 auto; align-content: end; }
-  .app-shell[data-view="map"] .settings-corner { top: auto; bottom: 5px; }
+  .app-shell[data-view="map"] .display-controls[data-open="true"] .settings-corner { top: auto; bottom: 5px; }
   .app-shell[data-view="map"] .settings-units { grid-area: 3 / 1 / 4 / 3; }
   .app-shell[data-view="map"] .settings-map { grid-area: 1 / 1 / 2 / 3; }
   .app-shell[data-view="map"] .settings-export { grid-area: 1 / 3; }
@@ -436,12 +436,12 @@
     user-select: none;
   }
   .sheet-handle:focus-visible { outline-offset: -4px; }
-  .sheet-grip { width: 36px; height: 4px; border-radius: 4px; background: var(--text-tertiary); opacity: .55; }
+  .sheet-grip { width: 44px; height: 5px; border-radius: 4px; background: var(--text-tertiary); opacity: .55; }
   .sheet-peek { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; font-size: 12px; }
   .sheet-peek strong { text-align: start; }
   .sheet-peek > span { color: var(--text-secondary); white-space: nowrap; }
-  .sheet-content { display: flex; flex-direction: column; min-height: 0; overflow: clip; overscroll-behavior: contain; padding: 0 16px calc(var(--mobile-bottom) + 16px); }
-  .sidebar, .sheet-content { touch-action: none; }
+  .sheet-content { display: flex; flex-direction: column; min-height: 0; overflow: hidden; overscroll-behavior: none; padding: 0 16px calc(var(--mobile-bottom) + 16px); }
+  .app-shell:not([data-sheet="expanded"]) .sheet-content { touch-action: none; }
   .sheet-content { flex: 1 1 auto; }
   .app-shell:is([data-sheet="expanded"], [data-sheet-at-top]) .sheet-content { overflow-y: auto; }
   .app-shell[data-view="map"][data-sheet="expanded"]:not([data-sheet-dragging]) .settings-anchor { visibility: hidden; }

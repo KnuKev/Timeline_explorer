@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { parseTimeline, type TimelinePoint } from './timeline'
 import { demoTimeline, demoStartDate, demoEndDate } from './demoTimeline'
 import { selectPlacesYear, type PlaceEntry } from './places'
@@ -57,94 +57,153 @@ function App() {
   const sheet = useRef<HTMLElement>(null)
   const sheetContent = useRef<HTMLDivElement>(null)
   const lastSheetWheel = useRef<{ time: number; direction: number } | null>(null)
-  const sheetDrag = useRef<{
-    pointerId: number
-    fromHandle: boolean
-    startY: number
-    startHeight: number
-    startScroll: number
-    positions: [number, number, number]
-    samples: { y: number; time: number }[]
-  } | null>(null)
-  const ignoreHandleClick = useRef(false)
+  const ignoreSheetClick = useRef(false)
 
-  function startSheetDrag(event: PointerEvent<HTMLElement>) {
-    if (!event.isPrimary || event.button !== 0 || !sheet.current || !shell.current || !(event.target instanceof Element)) return
-    ignoreHandleClick.current = false
-    const fromHandle = Boolean(event.target.closest('.sheet-handle'))
-    if (!fromHandle && event.target.closest('input, select, textarea')) return
-    if (!fromHandle && sheetSize === 'expanded' && event.pointerType !== 'touch') return
-    if (getComputedStyle(event.currentTarget).touchAction !== 'none' && !fromHandle) return
-    const style = getComputedStyle(sheet.current)
-    const min = parseFloat(style.minHeight)
-    const max = Math.max(min, parseFloat(style.maxHeight))
-    const half = Math.max(min, Math.min(max, shell.current.clientHeight * .48))
-    sheetDrag.current = {
-      pointerId: event.pointerId,
-      fromHandle,
-      startY: event.clientY,
-      startHeight: sheet.current.getBoundingClientRect().height,
-      startScroll: fromHandle ? 0 : sheetContent.current?.scrollTop ?? 0,
-      positions: [min, half, max],
-      samples: [{ y: event.clientY, time: event.timeStamp }],
-    }
-    if (fromHandle) event.target.closest('.sheet-handle')?.setPointerCapture(event.pointerId)
-  }
-
-  function moveSheetDrag(event: PointerEvent<HTMLElement>) {
-    const drag = sheetDrag.current
-    if (!drag || drag.pointerId !== event.pointerId || !shell.current) return
-    const distance = drag.startY - event.clientY
-    if (Math.abs(distance) < 5 && !ignoreHandleClick.current) return
-    if (!ignoreHandleClick.current && !drag.fromHandle) event.currentTarget.setPointerCapture(event.pointerId)
-    ignoreHandleClick.current = true
-    drag.samples = drag.samples.filter(sample => event.timeStamp - sample.time <= 100)
-    drag.samples.push({ y: event.clientY, time: event.timeStamp })
-    shell.current.dataset.sheetDragging = 'true'
-    const height = drag.startHeight + distance + drag.startScroll
-    shell.current.style.setProperty('--sheet-drag-height', `${height}px`)
-    if (!drag.fromHandle && sheetContent.current) {
-      const overflow = Math.max(0, height - drag.positions[2])
-      shell.current.toggleAttribute('data-sheet-at-top', height >= drag.positions[2])
-      sheetContent.current.scrollTop = overflow
-    }
-  }
-
-  function finishSheetDrag(event: PointerEvent<HTMLElement>) {
-    const drag = sheetDrag.current
+  useEffect(() => {
+    const panel = sheet.current
+    const content = sheetContent.current
     const element = shell.current
-    if (!drag || drag.pointerId !== event.pointerId || !element) return
-    sheetDrag.current = null
+    if (!panel || !content || !element) return
+    const mobile = window.matchMedia('(max-width: 680px)')
+    let gesture: {
+      id: number
+      x: number
+      y: number
+      fromHandle: boolean
+      height: number
+      stops: [number, number, number]
+      samples: { y: number; time: number }[]
+      dragging: boolean
+    } | undefined
 
-    if (event.type === 'pointerup' && ignoreHandleClick.current) {
-      const distance = drag.startY - event.clientY
-      const sample = drag.samples.find(entry => event.timeStamp - entry.time <= 100)
-      const velocity = sample ? (sample.y - event.clientY) / Math.max(1, event.timeStamp - sample.time) : 0
-      const [compact, middle, expanded] = drag.positions
-      const height = drag.startHeight + distance + drag.startScroll
-      const middleLower = middle - (middle - compact) * .6
-      const middleUpper = middle + (expanded - middle) * .6
-      // A release close to the middle wins over residual swipe momentum.
-      const momentum = Math.max(-180, Math.min(180, velocity * 160))
-      const projectedHeight = height + momentum
-      const current = sheetSizes.indexOf(sheetSize)
-      const next = height >= expanded ? 2 : height <= compact ? 0 : height >= middleLower && height <= middleUpper
-        ? 1
-        : drag.positions.reduce((best, stop, index) =>
-          Math.abs(stop - projectedHeight) < Math.abs(drag.positions[best]! - projectedHeight) ? index : best, current)
-      setSheetSize(sheetSizes[next]!)
+    function begin(id: number, x: number, y: number, time: number, fromHandle: boolean) {
+      if (!panel || !element) return
+      const style = getComputedStyle(panel)
+      const min = parseFloat(style.minHeight)
+      const max = Math.max(min, parseFloat(style.maxHeight))
+      const middle = Math.max(min, Math.min(max, element.clientHeight * .48))
+      gesture = { id, x, y, fromHandle, height: panel.getBoundingClientRect().height,
+        stops: [min, middle, max], samples: [{ y, time }], dragging: false }
     }
 
-    delete element.dataset.sheetDragging
-    element.style.removeProperty('--sheet-drag-height')
-    if (ignoreHandleClick.current) {
-      // Flush the map's visible area even when releasing at an existing stop.
+    function move(id: number, x: number, y: number, time: number, event: PointerEvent | TouchEvent) {
+      const drag = gesture
+      if (!drag || drag.id !== id || !element || !content) return
+      const distance = drag.y - y
+      if (!drag.dragging) {
+        if (Math.max(Math.abs(distance), Math.abs(x - drag.x)) < 5) return
+        if (Math.abs(x - drag.x) > Math.abs(distance)
+          || (!drag.fromHandle && sheetSize === 'expanded' && (distance > 0 || content.scrollTop > 1))) {
+          gesture = undefined
+          return
+        }
+        if (event instanceof PointerEvent) panel?.setPointerCapture(id)
+        drag.dragging = true
+        ignoreSheetClick.current = true
+        element.dataset.sheetDragging = 'true'
+      }
+      if (event.cancelable) event.preventDefault()
+      drag.samples = drag.samples.filter(sample => time - sample.time <= 100)
+      drag.samples.push({ y, time })
+      const height = drag.height + distance
+      element.style.setProperty('--sheet-drag-height', `${height}px`)
+      if (!drag.fromHandle) {
+        element.toggleAttribute('data-sheet-at-top', height >= drag.stops[2])
+        content.scrollTop = Math.max(0, height - drag.stops[2])
+      }
+    }
+
+    function finish(id: number, y: number, time: number, cancelled: boolean) {
+      const drag = gesture
+      if (!drag || drag.id !== id || !element) return
+      gesture = undefined
+      if (!drag.dragging) return
+      if (!cancelled) {
+        const distance = drag.y - y
+        const height = drag.height + distance
+        const [compact, middle, expanded] = drag.stops
+        const sample = drag.samples.find(entry => time - entry.time <= 100)
+        const velocity = sample ? (sample.y - y) / Math.max(1, time - sample.time) : 0
+        const current = sheetSizes.indexOf(sheetSize)
+        const flick = Math.abs(velocity) >= .45 && Math.abs(distance) >= 14
+        const next = height >= expanded ? 2 : height <= compact ? 0
+          : flick ? Math.max(0, Math.min(2, current + Math.sign(velocity)))
+            : height < middle - (middle - compact) * .66 ? 0
+              : height > middle + (expanded - middle) * .66 ? 2 : 1
+        setSheetSize(sheetSizes[next]!)
+      }
+      delete element.dataset.sheetDragging
+      element.style.removeProperty('--sheet-drag-height')
       requestAnimationFrame(() => {
         if (!element.hasAttribute('data-sheet-dragging')) element.removeAttribute('data-sheet-at-top')
-        sheet.current?.dispatchEvent(new Event('sheetsettle'))
+        panel?.dispatchEvent(new Event('sheetsettle'))
       })
     }
-  }
+
+    function onPointerDown(event: PointerEvent) {
+      if (!mobile.matches || !event.isPrimary || event.button !== 0 || !(event.target instanceof Element)) return
+      ignoreSheetClick.current = false
+      const handle = event.target.closest('.sheet-handle')
+      if (!handle && (event.pointerType === 'touch' || sheetSize === 'expanded' || event.target.closest('input, select, textarea'))) return
+      begin(event.pointerId, event.clientX, event.clientY, event.timeStamp, Boolean(handle))
+    }
+
+    function onPointerMove(event: PointerEvent) {
+      if (event.pointerType === 'touch' && !gesture?.fromHandle) return
+      move(event.pointerId, event.clientX, event.clientY, event.timeStamp, event)
+    }
+
+    function onPointerEnd(event: PointerEvent) {
+      if (event.pointerType === 'touch' && !gesture?.fromHandle) return
+      finish(event.pointerId, event.clientY, event.timeStamp, event.type !== 'pointerup')
+    }
+
+    function onTouchStart(event: TouchEvent) {
+      ignoreSheetClick.current = false
+      if (!mobile.matches || event.touches.length !== 1 || !(event.target instanceof Element)
+        || event.target.closest('input, select, textarea')) return
+      const touch = event.touches[0]!
+      begin(touch.identifier, touch.clientX, touch.clientY, event.timeStamp, false)
+    }
+
+    function onTouchMove(event: TouchEvent) {
+      if (!gesture || gesture.fromHandle) return
+      const touch = Array.from(event.changedTouches).find(entry => entry.identifier === gesture?.id)
+      if (!touch) return
+      if (event.touches.length !== 1 || !event.cancelable) {
+        finish(touch.identifier, touch.clientY, event.timeStamp, true)
+        return
+      }
+      move(touch.identifier, touch.clientX, touch.clientY, event.timeStamp, event)
+    }
+
+    function onTouchEnd(event: TouchEvent) {
+      if (!gesture || gesture.fromHandle) return
+      const touch = Array.from(event.changedTouches).find(entry => entry.identifier === gesture?.id)
+      if (touch) finish(touch.identifier, touch.clientY, event.timeStamp, event.type === 'touchcancel')
+    }
+
+    panel.addEventListener('pointerdown', onPointerDown)
+    panel.addEventListener('pointermove', onPointerMove)
+    panel.addEventListener('pointerup', onPointerEnd)
+    panel.addEventListener('pointercancel', onPointerEnd)
+    panel.addEventListener('lostpointercapture', onPointerEnd)
+    content.addEventListener('touchstart', onTouchStart, { passive: true })
+    content.addEventListener('touchmove', onTouchMove, { passive: false })
+    content.addEventListener('touchend', onTouchEnd)
+    content.addEventListener('touchcancel', onTouchEnd)
+    return () => {
+      panel.removeEventListener('pointerdown', onPointerDown)
+      panel.removeEventListener('pointermove', onPointerMove)
+      panel.removeEventListener('pointerup', onPointerEnd)
+      panel.removeEventListener('pointercancel', onPointerEnd)
+      panel.removeEventListener('lostpointercapture', onPointerEnd)
+      content.removeEventListener('touchstart', onTouchStart)
+      content.removeEventListener('touchmove', onTouchMove)
+      content.removeEventListener('touchend', onTouchEnd)
+      content.removeEventListener('touchcancel', onTouchEnd)
+    }
+  }, [sheetSize])
 
   useEffect(() => {
     if (sheetSize !== 'expanded' && sheetContent.current) sheetContent.current.scrollTop = 0
@@ -457,10 +516,8 @@ function App() {
       </div>}
       <div className="workspace" hidden={activeTab !== 'map'}>
         <aside ref={sheet} className="sidebar"
-          onPointerDown={startSheetDrag} onPointerMove={moveSheetDrag} onPointerUp={finishSheetDrag}
-          onPointerCancel={finishSheetDrag} onLostPointerCapture={finishSheetDrag}
           onClickCapture={event => {
-            if (event.detail && ignoreHandleClick.current) {
+            if (event.detail && ignoreSheetClick.current) {
               event.preventDefault()
               event.stopPropagation()
             }

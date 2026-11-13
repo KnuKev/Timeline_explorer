@@ -155,13 +155,6 @@
   .trips-destination-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .trips-section-heading { align-items: flex-start; gap: 12px; flex-wrap: wrap; }
   .trips-history-controls { justify-content: flex-start; }
-  .trips-recent-main { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; }
-  .trips-recent-destination { grid-column: 1 / 3; grid-row: 1; }
-  .trips-recent-dates { grid-column: 1; grid-row: 2; }
-  .trips-recent-dates > span { display: inline; }
-  .trips-recent-nights { grid-column: 2; grid-row: 2; }
-  .trips-open-map { grid-column: 3; grid-row: 2; }
-  .trips-details-toggle { grid-column: 3; grid-row: 1; }
   .trips-state.trips-empty { min-height: 320px; padding: 25px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -202,9 +195,22 @@
   .trips-intro, .trips-radius-hint, .trips-hero > small, .trips-method,
   .trips-favourites .trips-section-heading p, .trips-state > p:not([data-error-detail]) { display: none; }
   .trips-select.compact select { height: 46px; font-size: 13px; }
-  .trips-home-button, .trips-scope-switch button, .trips-open-map, .trips-details-toggle {
+  .trips-home-button, .trips-scope-switch button, .trips-open-map {
     min-height: var(--touch-target);
   }
+  .trips-recent-list { padding-inline: 12px; }
+  .trips-recent-row { padding-block: 8px; }
+  .trips-recent-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto var(--touch-target);
+    gap: 3px 8px;
+  }
+  .trips-recent-destination { grid-area: 1 / 1; }
+  .trips-recent-destination > span, .trips-details-toggle, .trips-recent-details { display: none; }
+  .trips-recent-dates { grid-area: 2 / 1; }
+  .trips-recent-dates > span { display: inline; }
+  .trips-recent-nights { grid-area: 1 / 2 / 3 / 3; align-self: center; }
+  .trips-open-map { grid-area: 1 / 3 / 3 / 4; width: var(--touch-target); justify-content: center; }
 }
 
 @media (max-width: 370px) {
