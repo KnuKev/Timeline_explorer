@@ -1,6 +1,6 @@
 # Timeline Explorer
 
-A Google Maps Timeline viewer for exploring your Google Location History on an interactive map. Import Timeline or Google Takeout JSON exports, view travel statistics, and merge exports locally in your desktop browser.
+A Google Maps Timeline viewer for exploring your Google Location History on an interactive map. Import Timeline or Google Takeout JSON exports, view travel statistics, and merge exports locally in your browser.
 
 [![Google Maps Timeline viewer showing some of my personal data across europe over the last 10 years](docs/images/timeline-map.png)](https://knukev.github.io/Timeline_explorer/)
 
@@ -19,6 +19,10 @@ Your file stays in browser memory and is never uploaded to GitHub. Refreshing th
 - **Trips** groups domestic and international journeys with at least two nights away. The default home radius is 25 km or 15 mi, depending on your distance units. A recorded return to the home area ends the trip. Use **Set home location** next to **Home area** to place a pin on the map. Choose **Entire history** or set an **Applies from** date. If you have moved, add a pin and start date for each home. Each pin applies until the next start date, and earlier dates use automatic home detection. Your choices are saved in your browser.
 - **Places** ranks countries and cities by recorded days. Click tiles to show movement in the selected area. Places with fewer than 10 points are in a collapsible section at the bottom.
 - **Statistics** shows monthly distance, a calendar coloured by distance, movement by time of day, recognised transport by distance or recorded travel time, and your most frequent routes between cities. **Under your own power** combines walking, running and cycling distance, compared with a lap around the Moon. These are estimates from recognised records; transport coverage is shown below the bars.
+
+## Mobile layout
+
+On smaller screens, the four tabs sit in a navigation bar at the bottom. In **Map**, drag the panel up to change the date range, see the route summary, or import a file. When the panel reaches the top, scroll to see the rest of its contents. In **Statistics**, **Year in motion** shows the year as twelve mini calendars. Tap a day with recorded data to open it on the map.
 
 ## Combine Timeline files
 

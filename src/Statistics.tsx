@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { memo, useMemo, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
 import type { StatisticsAnalysis, StatisticsPeriod } from './statistics'
 import { locales, translations, type Language } from './i18n'
 import { distanceInUnits, distanceUnit, formatCalendarDate, formatDistance, formatLargeDistance, formatPlaceDate, type DistanceUnits } from './formatting'
@@ -194,7 +194,16 @@ const MovementClock = memo(function MovementClock({ period, language, t }: Perio
   </article>
 })
 
+const mobileCalendarQuery = '(max-width: 680px)'
+
+function subscribeToCalendarWidth(onChange: () => void) {
+  const media = window.matchMedia(mobileCalendarQuery)
+  media.addEventListener('change', onChange)
+  return () => media.removeEventListener('change', onChange)
+}
+
 function Calendar({ period, year, years, language, t, distanceUnits, onOpenRange }: DistancePeriodProps & { year: number | null; years: number[]; onOpenRange: Props['onOpenRange'] }) {
+  const mobile = useSyncExternalStore(subscribeToCalendarWidth, () => window.matchMedia(mobileCalendarQuery).matches, () => false)
   const [ownYear, setOwnYear] = useState<number | null>(null)
   const calendarYear = year ?? (ownYear !== null && years.includes(ownYear) ? ownYear : Math.max(...years))
   const locale = locales[language]
@@ -204,16 +213,18 @@ function Calendar({ period, year, years, language, t, distanceUnits, onOpenRange
     const start = new Date(first + 'T12:00:00Z')
     const offset = (start.getUTCDay() + 6) % 7
     const records = new Map(period.daily.filter(day => day.date.startsWith(prefix)).map(day => [day.date, day.distanceKm]))
-    const days = []
-    const months = []
+    const days: { date: string; week: number; weekday: number; distance: number | undefined }[] = []
+    const months: { label: string; week: number; days: typeof days }[] = []
     const monthFormatter = new Intl.DateTimeFormat(locale, { month: 'short', timeZone: 'UTC' })
     const cursor = new Date(start)
     for (let index = 0; cursor.getUTCFullYear() === calendarYear; index++, cursor.setUTCDate(cursor.getUTCDate() + 1)) {
       const date = cursor.toISOString().slice(0, 10)
       const week = Math.floor((offset + index) / 7)
       const weekday = (offset + index) % 7
-      days.push({ date, week, weekday, distance: records.get(date) })
-      if (cursor.getUTCDate() === 1) months.push({ label: monthFormatter.format(cursor), week })
+      const day = { date, week, weekday, distance: records.get(date) }
+      days.push(day)
+      if (cursor.getUTCDate() === 1) months.push({ label: monthFormatter.format(cursor), week, days: [] })
+      months.at(-1)!.days.push(day)
     }
     const longest = days.reduce<(typeof days)[number] | null>((best, day) => day.distance !== undefined && (best === null || day.distance > (best.distance ?? 0)) ? day : best, null)
     return { days, months, weeks: Math.ceil((offset + days.length) / 7), recorded: records.size, longest }
@@ -231,18 +242,29 @@ function Calendar({ period, year, years, language, t, distanceUnits, onOpenRange
     const band = limits.findIndex(limit => distance < limit)
     return band === -1 ? 5 : band + 1
   }
+  const renderDay = (day: (typeof calendar.days)[number], gridColumn: number, gridRow: number) => {
+    const label = `${formatCalendarDate(day.date, locale)} · ${day.distance === undefined ? t.noData : formatDistance(day.distance, locale, distanceUnits)}`
+    return <button type="button" key={day.date} data-date={day.date} className={`statistics-calendar-day level-${level(day.distance)}`}
+      style={{ gridColumn, gridRow }} disabled={day.distance === undefined} title={label}
+      aria-label={`${label}${day.distance === undefined ? '' : `. ${t.openDay}`}`} onClick={() => onOpenRange(day.date, day.date)} />
+  }
+
   return <article className="statistics-card statistics-calendar">
     <CardHeading title={t.calendar} subtitle={t.calendarIntro}>{year === null ? <label className="statistics-select compact"><span>{t.calendarYear}</span><select aria-label={t.calendarYear} value={calendarYear} onChange={event => setOwnYear(Number(event.target.value))}>{[...years].sort((a, b) => b - a).map(value => <option key={value} value={value}>{value}</option>)}</select></label> : <span className="statistics-year-label">{year}</span>}</CardHeading>
-    <div className="statistics-calendar-scroll">
+    {mobile ? <div className="statistics-calendar-months">
+      {calendar.months.map(month => <section key={month.days[0]!.date} className="statistics-calendar-tile" aria-label={month.label}>
+        <h3>{month.label}</h3>
+        <div className="statistics-calendar-tile-grid">
+          {month.days.map(day => renderDay(day, day.weekday + 1, day.week - month.week + 1))}
+        </div>
+      </section>)}
+    </div> : <div className="statistics-calendar-scroll">
       <div className="statistics-calendar-grid" style={{ '--calendar-weeks': calendar.weeks } as CSSProperties}>
-        {calendar.months.map((month, index) => <span className="statistics-calendar-month" key={index} style={{ gridColumn: month.week + 2, gridRow: 1 }}>{month.label}</span>)}
+        {calendar.months.map(month => <span className="statistics-calendar-month" key={month.days[0]!.date} style={{ gridColumn: month.week + 2, gridRow: 1 }}>{month.label}</span>)}
         {[0, 2, 4].map(day => <span key={day} className="statistics-calendar-weekday" style={{ gridColumn: 1, gridRow: day + 2 }}>{weekdays[day]}</span>)}
-        {calendar.days.map(day => {
-          const label = `${formatCalendarDate(day.date, locale)} · ${day.distance === undefined ? t.noData : formatDistance(day.distance, locale, distanceUnits)}`
-          return <button type="button" key={day.date} data-date={day.date} className={`statistics-calendar-day level-${level(day.distance)}`} style={{ gridColumn: day.week + 2, gridRow: day.weekday + 2 }} disabled={day.distance === undefined} title={label} aria-label={`${label}${day.distance === undefined ? '' : `. ${t.openDay}`}`} onClick={() => onOpenRange(day.date, day.date)} />
-        })}
+        {calendar.days.map(day => renderDay(day, day.week + 2, day.weekday + 2))}
       </div>
-    </div>
+    </div>}
     <div className="statistics-calendar-footer"><span><strong>{calendar.recorded.toLocaleString(locale)}</strong> {t.calendarRecorded}</span><div className="statistics-heat-legend" aria-label={t.distance}>{[
       ['unknown', t.noData], ['0', `0 ${unit}`], ['1', `<${limits[0]}`],
       ...limits.slice(1).map((limit, index) => [String(index + 2), `${limits[index]}–${limit}`]), ['5', `${limits.at(-1)}+ ${unit}`],
@@ -304,10 +326,10 @@ function StatisticsContent({ data, language, isDemo, distanceUnits = 'metric', o
     <Overview distanceUnits={distanceUnits} period={period} language={language} t={t} />
     <div className="statistics-layout">
       <MonthlyChart distanceUnits={distanceUnits} data={data} period={period} year={year} language={language} t={t} onOpenRange={onOpenRange} />
-      <MovementClock period={period} language={language} t={t} />
       {years.length > 0 && <Calendar distanceUnits={distanceUnits} period={period} year={year} years={years} language={language} t={t} onOpenRange={onOpenRange} />}
       <TransportChart distanceUnits={distanceUnits} period={period} language={language} t={t} />
       <HumanPowered distanceUnits={distanceUnits} period={period} language={language} t={t} />
+      <MovementClock period={period} language={language} t={t} />
       <Patterns period={period} language={language} t={t} onOpenRange={onOpenRange} />
       <NewPlaces period={period} language={language} t={t} onOpenRange={onOpenRange} />
     </div>

@@ -175,6 +175,7 @@
   .app-shell { --report-toolbar-clearance: var(--workspace-gap); }
 }
 .sidebar { position: absolute; z-index: 300; top: var(--workspace-gap); left: var(--workspace-gap); width: var(--sidebar-width); max-height: calc(100% - 2 * var(--workspace-gap)); padding: 20px; overflow-y: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow); scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.sheet-handle { display: none; }
 .sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
 .sidebar-heading h1 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -.6px; }
 .sidebar-status { display: inline-flex; align-items: center; gap: 5px; color: var(--text-secondary); font-size: 10px; white-space: nowrap; }
@@ -362,24 +363,151 @@
   .summary-card strong { font-size: 24px; }
 }
 @media (max-width: 680px) {
-  .app-shell { --workspace-gap: 12px; --settings-cell: 32px; }
-  .app-shell:has(.display-controls[data-open="true"]) {
-    --report-toolbar-clearance: calc(var(--workspace-gap) + 3 * var(--settings-cell) + 2 * var(--settings-gap) + 24px);
+  .app-shell {
+    --workspace-gap: 12px;
+    --settings-cell: 44px;
+    --toolbar-height: 56px;
+    --touch-target: 44px;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --mobile-nav-height: 70px;
+    --mobile-bottom: calc(var(--mobile-nav-height) + 16px + env(safe-area-inset-bottom, 0px));
+    --sheet-min-height: calc(var(--mobile-bottom) + 64px);
+    --sheet-max-height: max(var(--sheet-min-height), calc(100dvh - var(--safe-top) - 8px));
+    --sheet-rest-height: 48dvh;
+    --sheet-height: clamp(var(--sheet-min-height), var(--sheet-drag-height, var(--sheet-rest-height)), var(--sheet-max-height));
+    --sheet-motion: .26s cubic-bezier(.2, .8, .25, 1);
+    --report-toolbar-clearance: calc(var(--safe-top) + 10px);
+    min-height: 0;
   }
-  .floating-toolbar { grid-template-columns: auto 1fr; gap: 8px; }
-  .main-nav { grid-column: 1; gap: 1px; }
-  .settings-anchor { grid-column: 2; }
-  .nav-item { font-size: 12px; padding-inline: 8px; }
-  .sidebar { width: min(var(--sidebar-width), calc(100% - 24px)); max-height: min(58%, calc(100% - var(--toolbar-height) - 3 * var(--workspace-gap))); }
-  .map-bottom-overlay { left: 12px; }
-  .selected-card { left: 12px; right: 64px; max-width: calc(100% - 76px); }
-  .map-zoom-controls { right: 12px; }
-  .places-page { padding-inline: 16px; }
+  .app-shell[data-sheet="compact"] { --sheet-rest-height: var(--sheet-min-height); }
+  .app-shell[data-sheet="expanded"] { --sheet-rest-height: var(--sheet-max-height); }
+  .app-shell[data-sheet-dragging] { --sheet-motion: 0s; }
+  .floating-toolbar { inset: 0; display: block; }
+  .main-nav {
+    position: absolute;
+    inset: auto max(12px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    height: var(--mobile-nav-height);
+    border-radius: 20px;
+    gap: 2px;
+  }
+  .main-nav::before { height: calc(var(--mobile-nav-height) - 12px); border-radius: 14px; }
+  .nav-item { flex: 1 1 0; min-width: 0; height: 100%; flex-direction: column; gap: 4px; padding: 0; font-size: 12px; }
+  .nav-item .ui-icon { height: 21px; width: 21px; }
+  .settings-anchor { position: absolute; top: calc(var(--safe-top) + 10px); right: 12px; }
+  .app-shell[data-view="map"] .settings-anchor { top: auto; bottom: calc(var(--sheet-height) + 73px); transition: bottom var(--sheet-motion); }
+  .app-shell[data-view="map"] .display-controls { inset: auto 0 0 auto; align-content: end; }
+  .app-shell[data-view="map"] .settings-corner { top: auto; bottom: 5px; }
+  .app-shell[data-view="map"] .settings-units { grid-area: 3 / 1 / 4 / 3; }
+  .app-shell[data-view="map"] .settings-map { grid-area: 1 / 1 / 2 / 3; }
+  .app-shell[data-view="map"] .settings-export { grid-area: 1 / 3; }
+
+  .sidebar {
+    inset: auto 0 0;
+    width: 100%;
+    height: var(--sheet-height);
+    min-height: var(--sheet-min-height);
+    max-height: var(--sheet-max-height);
+    transition: height var(--sheet-motion);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0;
+    border-radius: 22px 22px 0 0;
+  }
+  .sheet-handle {
+    display: grid;
+    flex: none;
+    width: 100%;
+    min-height: var(--touch-target);
+    place-items: center;
+    align-content: center;
+    gap: 8px;
+    padding: 6px 16px;
+    border: 0;
+    background: var(--surface);
+    color: var(--text);
+    cursor: ns-resize;
+    touch-action: none;
+    user-select: none;
+  }
+  .sheet-handle:focus-visible { outline-offset: -4px; }
+  .sheet-grip { width: 36px; height: 4px; border-radius: 4px; background: var(--text-tertiary); opacity: .55; }
+  .sheet-peek { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; font-size: 12px; }
+  .sheet-peek strong { text-align: start; }
+  .sheet-peek > span { color: var(--text-secondary); white-space: nowrap; }
+  .sheet-content { display: flex; flex-direction: column; min-height: 0; overflow: clip; overscroll-behavior: contain; padding: 0 16px calc(var(--mobile-bottom) + 16px); }
+  .app-shell:not([data-sheet="expanded"]) .sidebar { touch-action: none; }
+  .app-shell:is([data-sheet="expanded"], [data-sheet-at-top]) .sheet-content { overflow-y: auto; }
+  .app-shell[data-view="map"][data-sheet="expanded"]:not([data-sheet-dragging]) .settings-anchor { visibility: hidden; }
+  .app-shell[data-sheet="compact"]:not([data-sheet-dragging]) .sheet-handle { min-height: 64px; }
+  .app-shell[data-sheet="compact"]:not([data-sheet-dragging]) .sheet-content { visibility: hidden; transition: visibility 0s .26s; }
+  .app-shell[data-sheet-dragging] .sheet-peek { display: none; }
+  .sheet-content > * { flex: none; }
+  .sheet-import { order: 1; margin-top: 18px; }
+  .activity-section { order: 2; }
+  .sidebar-heading { margin-bottom: 10px; }
+  .sidebar-heading h1 { font-size: 16px; }
+  .date-section { margin-top: 0; }
+  .section-title-row { margin-bottom: 8px; }
+  .segmented-control button { height: var(--touch-target); }
+  .date-section .quiet-button, .import-button, .scope-toggle { min-height: var(--touch-target); }
+  .import-button { display: inline-flex; align-items: center; }
+  .date-nav button { flex-basis: var(--touch-target); width: var(--touch-target); height: var(--touch-target); }
+  .period-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 8px; }
+  .period-fields label { min-width: 0; }
+  .date-input, .period-fields input { height: 46px; font-size: 16px; padding-inline: 6px; }
+  .summary-section { margin-top: 12px; padding: 13px; }
+  .summary-section .section-title-row { margin-bottom: 10px; }
+  .point-list-disclosure, .point-list-pagination button, .merge-actions :is(button, a) { min-height: var(--touch-target); }
+  .quality-notice { padding-inline-end: 58px; }
+  .quality-dismiss, .selected-card > button, .app-shell .merge-close {
+    width: var(--touch-target);
+    height: var(--touch-target);
+  }
+
+  .map-bottom-overlay { display: none; }
+  .map-zoom-controls { right: 12px; bottom: calc(var(--sheet-height) + 21px); flex-direction: row; transition: bottom var(--sheet-motion); }
+  .map-view .leaflet-bottom { bottom: calc(var(--sheet-height) + 1px); transition: bottom var(--sheet-motion); }
+  .map-view .leaflet-control-attribution { margin-right: 6px; }
+  .map-zoom-controls button { width: var(--touch-target); height: var(--touch-target); }
+  .map-zoom-controls button + button { border-top: 0; border-left: 1px solid var(--border); }
+  .selected-card { inset: calc(var(--safe-top) + 10px) 12px auto; margin: 0; max-width: calc(100% - 24px); }
+  .selected-card { min-height: 64px; padding-inline-end: 62px; }
+  .report-heading {
+    align-items: center;
+    gap: 8px;
+    padding-inline-end: calc(var(--settings-cell) + 18px);
+  }
+  .report-heading h1 { min-width: 0; }
+  .report-period select { max-width: 100%; height: 46px; font-size: 13px; }
+  .places-page { padding: var(--report-toolbar-clearance) 16px calc(var(--mobile-bottom) + 20px); }
   .places-page-heading h1 { font-size: 30px; }
-  .places-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+  .places-tabs button { min-height: var(--touch-target); }
+  .places-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .place-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto auto auto;
+    min-height: 0;
+    gap: 8px;
+    padding: 12px;
+  }
+  .place-rank { grid-area: 1 / 1; padding: 0; font-size: 10px; }
+  .place-card-copy { grid-area: 2 / 1; }
+  .place-card-copy strong { font-size: 14px; }
+  .place-days { grid-area: 1 / 2 / 3; }
+  .place-days strong { font-size: 22px; }
+  .place-card-footer { gap: 4px; font-size: 10px; }
+  .place-card-footer .ui-icon { width: 13px; height: 13px; }
 }
-@media (max-width: 520px) {
-  .nav-item { width: 31px; padding: 0; }
-  .nav-item > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (min-width: 540px) and (max-width: 680px) {
+  .places-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 539px) {
+  .report-period > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .report-heading h1 { font-size: 26px; }
+}
+@media (max-width: 680px) and (max-height: 540px) {
+  .app-shell[data-view="map"]:has(.display-controls[data-open="true"]) .settings-anchor { top: calc(var(--safe-top) + 8px); bottom: auto; }
+  .app-shell[data-view="map"] .display-controls[data-open="true"] { inset: 0 0 auto auto; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

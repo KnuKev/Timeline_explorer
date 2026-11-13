@@ -64,7 +64,8 @@ function mapPadding(map: L.Map): { paddingTopLeft: L.PointExpression; paddingBot
   const sidebar = container.closest('.workspace')?.querySelector('.sidebar')?.getBoundingClientRect()
   if (!sidebar || sidebar.width === 0 || sidebar.height === 0) return { paddingTopLeft: [30, 70], paddingBottomRight: [50, 70] }
   if (mapRect.width <= 680) {
-    return { paddingTopLeft: [24, Math.min(sidebar.bottom - mapRect.top + 18, mapRect.height - 100)], paddingBottomRight: [50, 70] }
+    const visibleHeight = Math.max(1, sidebar.top - mapRect.top)
+    return { paddingTopLeft: [20, Math.min(24, visibleHeight * .15)], paddingBottomRight: [56, mapRect.height - visibleHeight + Math.min(28, visibleHeight * .15)] }
   }
   return { paddingTopLeft: [Math.min(sidebar.right - mapRect.left + 24, mapRect.width * 0.55), 70], paddingBottomRight: [50, 70] }
 }
@@ -226,6 +227,7 @@ function ViewportAndControls({ points, selectedPoint, language, active }: { poin
     const wasAtOverview = overview.current?.zoom === map.getZoom()
     map.invalidateSize({ pan: true, animate: false })
     const padding = mapPadding(map)
+    if (map.getSize().y - L.point(padding.paddingBottomRight).y < 72) return
     const topLeft = L.point(padding.paddingTopLeft)
     const bottomRight = L.point(padding.paddingBottomRight)
     const available = map.getSize().subtract(topLeft).subtract(bottomRight)
@@ -239,8 +241,9 @@ function ViewportAndControls({ points, selectedPoint, language, active }: { poin
     if (displayedPoints.current !== points) {
       fit()
       displayedPoints.current = points
-    } else if (wasAtOverview && map.getZoom() !== zoom) {
-      map.setView(center, zoom, { animate: false })
+    } else if (wasAtOverview) {
+      if (map.getZoom() !== zoom) map.setView(center, zoom, { animate: false })
+      else centerOverview()
     }
     // A selected marker may remain selected after the user pans away. Do not
     // bring it back merely because the tab or browser size changed.
@@ -255,7 +258,7 @@ function ViewportAndControls({ points, selectedPoint, language, active }: { poin
       const target = left.add(right).divideBy(2)
       map.panBy(position.subtract(target), { animate: false })
     }
-  }, [active, map, points, fit, selectedPoint])
+  }, [active, map, points, fit, selectedPoint, centerOverview])
   useEffect(() => {
     synchronizeRef.current = synchronize
     synchronize()
@@ -271,8 +274,18 @@ function ViewportAndControls({ points, selectedPoint, language, active }: { poin
     const container = map.getContainer()
     observer.observe(container)
     const sidebar = container.closest('.workspace')?.querySelector('.sidebar')
-    if (sidebar) observer.observe(sidebar)
-    return () => { observer.disconnect(); synchronizeRef.current = () => {} }
+    const syncPanel = () => {
+      if (!container.closest('[data-sheet-dragging]')) synchronizeRef.current()
+    }
+    const sidebarObserver = new ResizeObserver(syncPanel)
+    if (sidebar) sidebarObserver.observe(sidebar)
+    sidebar?.addEventListener('sheetsettle', syncPanel)
+    return () => {
+      observer.disconnect()
+      sidebarObserver.disconnect()
+      sidebar?.removeEventListener('sheetsettle', syncPanel)
+      synchronizeRef.current = () => {}
+    }
   }, [map])
   const t = translations[language]
   useEffect(() => {

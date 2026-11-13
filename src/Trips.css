@@ -188,3 +188,11 @@
 .home-location-dates { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 14px; font-size: 13px; }
 .home-location-dates label { display: flex; gap: 6px; align-items: center; }
 .home-location-dates input[type="date"] { padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }
+
+@media (max-width: 680px) {
+  .trips-page { padding-bottom: calc(var(--mobile-bottom) + 20px); }
+  .trips-select.compact select { height: 46px; font-size: 13px; }
+  .trips-home-button, .trips-scope-switch button, .trips-open-map, .trips-details-toggle {
+    min-height: var(--touch-target);
+  }
+}

@@ -12,6 +12,7 @@ export function getStoredLanguage(): Language {
 
 const nb = {
   history: 'DIN HISTORIKK', explore: 'Utforsk steder', myTimeline: 'Min tidslinje', navigation: 'Hovedmeny',
+  expandMapPanel: 'Åpne kartinformasjon', collapseMapPanel: 'Minimer kartinformasjon',
   map: 'Kart', trips: 'Reiser', places: 'Steder', statistics: 'Statistikk', comingSoon: 'Kommer senere',
   localFile: 'Lokal fil', language: 'Språk', lightTheme: 'Bytt til lyst tema', darkTheme: 'Bytt til mørkt tema',
   settings: 'Innstillinger', mapBackground: 'Kartbakgrunn', satellite: 'Satellitt', exportTimeline: 'Eksporter tidslinjen',
@@ -59,6 +60,7 @@ const nb = {
 
 const en: Record<keyof typeof nb, string> = {
   history: 'YOUR HISTORY', explore: 'Explore places', myTimeline: 'My timeline', navigation: 'Main navigation',
+  expandMapPanel: 'Open map information', collapseMapPanel: 'Minimize map information',
   map: 'Map', trips: 'Trips', places: 'Places', statistics: 'Statistics', comingSoon: 'Coming soon',
   localFile: 'Local file', language: 'Language', lightTheme: 'Switch to light theme', darkTheme: 'Switch to dark theme',
   settings: 'Settings', mapBackground: 'Map background', satellite: 'Satellite', exportTimeline: 'Export timeline',

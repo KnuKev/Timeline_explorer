@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { parseTimeline, type TimelinePoint } from './timeline'
 import { demoTimeline, demoStartDate, demoEndDate } from './demoTimeline'
 import { selectPlacesYear, type PlaceEntry } from './places'
@@ -17,6 +17,9 @@ import SettingsMenu from './SettingsMenu'
 import HomeLocationDialog from './HomeLocationDialog'
 import { distanceUnitsStorageKey, formatCalendarDate, formatPlaceDate, formatPointInterval, formatDistance, formatLargeDistance, getStoredDistanceUnits } from './formatting'
 import './App.css'
+
+type SheetSize = 'compact' | 'half' | 'expanded'
+const sheetSizes: SheetSize[] = ['compact', 'half', 'expanded']
 
 type DateMode = 'day' | 'period'
 type ActiveTab = 'map' | 'trips' | 'places' | 'statistics'
@@ -49,6 +52,126 @@ function App() {
   const pointsById = useMemo(() => new Map(importedPoints.map(point => [point.id, point])), [importedPoints])
   const suspectPointIds = useMemo(() => new Set(dataset.excluded.map(entry => entry.point.id)), [dataset])
   const [activeTab, setActiveTab] = useState<ActiveTab>('map')
+  const [sheetSize, setSheetSize] = useState<SheetSize>('half')
+  const shell = useRef<HTMLElement>(null)
+  const sheet = useRef<HTMLElement>(null)
+  const sheetContent = useRef<HTMLDivElement>(null)
+  const lastSheetWheel = useRef<{ time: number; direction: number } | null>(null)
+  const sheetDrag = useRef<{
+    pointerId: number
+    fromHandle: boolean
+    startY: number
+    startHeight: number
+    positions: [number, number, number]
+    samples: { y: number; time: number }[]
+  } | null>(null)
+  const ignoreHandleClick = useRef(false)
+
+  function startSheetDrag(event: PointerEvent<HTMLElement>) {
+    if (!event.isPrimary || event.button !== 0 || !sheet.current || !shell.current || !(event.target instanceof Element)) return
+    ignoreHandleClick.current = false
+    const fromHandle = Boolean(event.target.closest('.sheet-handle'))
+    if (!fromHandle && (sheetSize === 'expanded' || event.target.closest('input, select, textarea'))) return
+    if (getComputedStyle(event.currentTarget).touchAction !== 'none' && !fromHandle) return
+    const style = getComputedStyle(sheet.current)
+    const min = parseFloat(style.minHeight)
+    const max = Math.max(min, parseFloat(style.maxHeight))
+    const half = Math.max(min, Math.min(max, shell.current.clientHeight * .48))
+    sheetDrag.current = {
+      pointerId: event.pointerId,
+      fromHandle,
+      startY: event.clientY,
+      startHeight: sheet.current.getBoundingClientRect().height,
+      positions: [min, half, max],
+      samples: [{ y: event.clientY, time: event.timeStamp }],
+    }
+    if (fromHandle) event.target.closest('.sheet-handle')?.setPointerCapture(event.pointerId)
+  }
+
+  function moveSheetDrag(event: PointerEvent<HTMLElement>) {
+    const drag = sheetDrag.current
+    if (!drag || drag.pointerId !== event.pointerId || !shell.current) return
+    const distance = drag.startY - event.clientY
+    if (Math.abs(distance) < 5 && !ignoreHandleClick.current) return
+    if (!ignoreHandleClick.current && !drag.fromHandle) event.currentTarget.setPointerCapture(event.pointerId)
+    ignoreHandleClick.current = true
+    drag.samples = drag.samples.filter(sample => event.timeStamp - sample.time <= 100)
+    drag.samples.push({ y: event.clientY, time: event.timeStamp })
+    shell.current.dataset.sheetDragging = 'true'
+    const height = drag.startHeight + distance
+    shell.current.style.setProperty('--sheet-drag-height', `${height}px`)
+    if (!drag.fromHandle && sheetContent.current) {
+      const overflow = Math.max(0, height - drag.positions[2])
+      shell.current.toggleAttribute('data-sheet-at-top', overflow > 0)
+      sheetContent.current.scrollTop = overflow
+    }
+  }
+
+  function finishSheetDrag(event: PointerEvent<HTMLElement>) {
+    const drag = sheetDrag.current
+    const element = shell.current
+    if (!drag || drag.pointerId !== event.pointerId || !element) return
+    sheetDrag.current = null
+
+    if (event.type === 'pointerup' && ignoreHandleClick.current) {
+      const distance = drag.startY - event.clientY
+      const sample = drag.samples.find(entry => event.timeStamp - entry.time <= 100)
+      const velocity = sample ? (sample.y - event.clientY) / Math.max(1, event.timeStamp - sample.time) : 0
+      const [compact, middle, expanded] = drag.positions
+      const height = drag.startHeight + distance
+      const middleLower = middle - (middle - compact) * .6
+      const middleUpper = middle + (expanded - middle) * .6
+      // A release close to the middle wins over residual swipe momentum.
+      const momentum = Math.max(-180, Math.min(180, velocity * 160))
+      const projectedHeight = height + momentum
+      const current = sheetSizes.indexOf(sheetSize)
+      const next = height >= expanded ? 2 : height <= compact ? 0 : height >= middleLower && height <= middleUpper
+        ? 1
+        : drag.positions.reduce((best, stop, index) =>
+          Math.abs(stop - projectedHeight) < Math.abs(drag.positions[best]! - projectedHeight) ? index : best, current)
+      setSheetSize(sheetSizes[next]!)
+    }
+
+    delete element.dataset.sheetDragging
+    element.style.removeProperty('--sheet-drag-height')
+    if (ignoreHandleClick.current) {
+      // Flush the map's visible area even when releasing at an existing stop.
+      requestAnimationFrame(() => {
+        if (!element.hasAttribute('data-sheet-dragging')) element.removeAttribute('data-sheet-at-top')
+        sheet.current?.dispatchEvent(new Event('sheetsettle'))
+      })
+    }
+  }
+
+  useEffect(() => {
+    if (sheetSize !== 'expanded' && sheetContent.current) sheetContent.current.scrollTop = 0
+  }, [sheetSize])
+
+  useEffect(() => {
+    const panel = sheet.current
+    if (!panel) return
+    const onWheel = (event: WheelEvent) => {
+      if (!window.matchMedia('(max-width: 680px)').matches || event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
+      const direction = Math.sign(event.deltaY)
+      const previous = lastSheetWheel.current
+      const continued = previous?.direction === direction && event.timeStamp - previous.time < 180
+      const reachedTop = sheetSize === 'expanded' && panel.getBoundingClientRect().height >= parseFloat(getComputedStyle(panel).maxHeight) - 1
+      if (reachedTop && direction > 0) return
+      if (continued) {
+        event.preventDefault()
+        lastSheetWheel.current = { time: event.timeStamp, direction }
+        return
+      }
+      if (sheetSize === 'expanded' && (direction > 0 || (sheetContent.current?.scrollTop ?? 0) > 0)) return
+      event.preventDefault()
+      lastSheetWheel.current = { time: event.timeStamp, direction }
+      const next = Math.max(0, Math.min(2, sheetSizes.indexOf(sheetSize) + direction))
+      setSheetSize(sheetSizes[next]!)
+    }
+    panel.addEventListener('wheel', onWheel, { passive: false })
+    return () => panel.removeEventListener('wheel', onWheel)
+  }, [sheetSize])
+
   const mainNav = useRef<HTMLElement>(null)
   useLayoutEffect(() => {
     const nav = mainNav.current
@@ -135,6 +258,7 @@ function App() {
       }
       setPlaceViewEnabled(true)
       setTripScope(null)
+      setSheetSize('compact')
       setActiveTab('map')
       setSelectedPointId(null)
     }}>
@@ -203,6 +327,7 @@ function App() {
     setPlaceViewEnabled(false)
     setTripScope(null)
     setSelectedPointId(null)
+    setSheetSize('compact')
     setActiveTab('map')
   }, [])
   const openTrip = useCallback((trip: TimelineTrip) => {
@@ -214,6 +339,7 @@ function App() {
     setSelectedDate(trip.startDate)
     setDateMode('period')
     setSelectedPointId(null)
+    setSheetSize('compact')
     setActiveTab('map')
   }, [])
   const changeHomeRadius = useCallback((radius: number) => {
@@ -252,7 +378,7 @@ function App() {
   ))
 
   return (
-    <main className={'app-shell' + (isDark ? ' dark' : '')} data-view={activeTab}>
+    <main ref={shell} data-sheet={sheetSize} className={'app-shell' + (isDark ? ' dark' : '')} data-view={activeTab}>
       <header className="floating-toolbar">
         <nav ref={mainNav} className="main-nav" aria-label={t.navigation}>
           <button className={'nav-item' + (activeTab === 'map' ? ' is-current' : '')} aria-current={activeTab === 'map' ? 'page' : undefined} type="button" onClick={() => setActiveTab('map')}><Icon name="map" /><span>{t.map}</span></button>
@@ -327,121 +453,144 @@ function App() {
         </Suspense>
       </div>}
       <div className="workspace" hidden={activeTab !== 'map'}>
-        <aside className="sidebar">
-          <div className="sidebar-heading"><h1>{t.myTimeline}</h1><span className="sidebar-status"><span />{isDemo ? t.exampleData : t.localFile}</span></div>
-          <section className="import-card">
-            <div className="import-icon"><Icon name="upload" /></div>
-            <div className="import-copy">
-              <strong title={fileName || t.importTimeline}>{fileName || t.importTimeline}</strong>
-              <span>{isDemo ? t.sampleHint : t.fileLoaded}</span>
-            </div>
-            <label className="import-button">
-              {isDemo ? t.chooseFile : t.changeFile}
-              <input
-                type="file"
-                accept=".json,application/json"
-                onChange={event => { importFile(event.target.files?.[0]); event.target.value = '' }}
-              />
-            </label>
-          </section>
-          {isDemo && <a className="sample-download" href={demoTimelineUrl} download="Timeline-example.json">{t.downloadSample}</a>}
-          {importStage && <div className="import-progress" role="status" aria-live="polite"><span className="places-spinner" /><span>{t[importStage]}</span><button type="button" onClick={cancelImport}>{t.cancel}</button></div>}
-          {error && <p className="error-message" role="alert">{t[error]}</p>}
-          {qualityNotice}
-
-          <section className="date-section">
-            <div className="section-title-row">
-              <h2>{t.time}</h2>
-              <button className="quiet-button" type="button" onClick={() => {
-                if (availableDays.length) {
-                  setDateMode('day')
-                  changeDay(availableDays[availableDays.length - 1]!)
-                }
-              }}>{t.lastDay}</button>
-            </div>
-
-            <div className="segmented-control" role="tablist" aria-label={t.selectPeriod}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={dateMode === 'day'}
-                className={dateMode === 'day' ? 'selected' : ''}
-                onClick={() => { setDateMode('day'); setPlaceViewEnabled(false); setTripScope(null) }}
-              >{t.oneDay}</button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={dateMode === 'period'}
-                className={dateMode === 'period' ? 'selected' : ''}
-                onClick={() => { setDateMode('period'); setPlaceViewEnabled(false); setTripScope(null) }}
-              >{t.period}</button>
-            </div>
-
-            {dateMode === 'day' ? (
-              <div className="date-picker-wrap">
-                <div className="date-nav">
-                  <button type="button" aria-label={t.previousDay} onClick={() => shiftDay(-1)} disabled={!previousDay}><Icon name="left" /></button>
-                  <label htmlFor="selected-day">{formatCalendarDate(selectedDate, locale)}</label>
-                  <button type="button" aria-label={t.nextDay} onClick={() => shiftDay(1)} disabled={!nextDay}><Icon name="right" /></button>
+        <aside ref={sheet} className="sidebar"
+          onPointerDown={startSheetDrag} onPointerMove={moveSheetDrag} onPointerUp={finishSheetDrag}
+          onPointerCancel={finishSheetDrag} onLostPointerCapture={finishSheetDrag}
+          onClickCapture={event => {
+            if (event.detail && ignoreHandleClick.current) {
+              event.preventDefault()
+              event.stopPropagation()
+            }
+          }}>
+          <button type="button" className="sheet-handle" aria-expanded={sheetSize !== 'compact'} aria-controls="map-sheet-content"
+            aria-label={sheetSize === 'compact' ? t.expandMapPanel : t.collapseMapPanel}
+            onClick={() => setSheetSize(size => size === 'compact' ? 'half' : 'compact')}
+            onKeyDown={event => {
+              if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+              event.preventDefault()
+              const step = event.key === 'ArrowUp' ? 1 : -1
+              setSheetSize(size => sheetSizes[Math.max(0, Math.min(2, sheetSizes.indexOf(size) + step))]!)
+            }}>
+            <span className="sheet-grip" />
+            {sheetSize === 'compact' && <span className="sheet-peek"><strong>{dateMode === 'day' ? formatPlaceDate(selectedDate, locale) : `${formatPlaceDate(fromDate, locale)} – ${formatPlaceDate(toDate, locale)}`}</strong><span>{distanceLabel}</span></span>}
+          </button>
+          <div ref={sheetContent} className="sheet-content" id="map-sheet-content">
+            <div className="sheet-import">
+              <div className="sidebar-heading"><h1>{t.myTimeline}</h1><span className="sidebar-status"><span />{isDemo ? t.exampleData : t.localFile}</span></div>
+              <section className="import-card">
+                <div className="import-icon"><Icon name="upload" /></div>
+                <div className="import-copy">
+                  <strong title={fileName || t.importTimeline}>{fileName || t.importTimeline}</strong>
+                  <span>{isDemo ? t.sampleHint : t.fileLoaded}</span>
                 </div>
-                <input
-                  id="selected-day"
-                  className="date-input"
-                  type="date"
-                  value={selectedDate}
-                  min={availableDays[0]} max={availableDays[availableDays.length - 1]}
-                  onChange={event => changeDay(event.target.value)}
-                />
-                <div className="date-hint">{availableDays.length.toLocaleString(locale)} {t.recordedDays}</div>
-              </div>
-            ) : (
-              <div className="period-fields">
-                <label>{t.from}<input type="date" value={fromDate} min={availableDays[0]} max={availableDays[availableDays.length - 1]} onChange={event => { const date = event.target.value; if (!date) return; setFromDate(date); if (date > toDate) setToDate(date); setPlaceViewEnabled(false); setTripScope(null); setSelectedPointId(null) }} /></label>
-                <label>{t.to}<input type="date" value={toDate} min={fromDate} max={availableDays[availableDays.length - 1]} onChange={event => { const date = event.target.value; if (!date) return; setToDate(date); if (date < fromDate) setFromDate(date); setPlaceViewEnabled(false); setTripScope(null); setSelectedPointId(null) }} /></label>
-                <p>{placeViewEnabled && placeScope ? mapPoints.length.toLocaleString(locale) + ' ' + (placeScope.kind === 'country' ? t.pointsInCountry : t.pointsInCity) : mapPoints.length.toLocaleString(locale) + ' ' + t.pointsInPeriod}</p>
-              </div>
-            )}
-          </section>
-
-          {(tripScope || placeScope) && <div className="scope-actions">
-            {tripScope && <>
-              <strong>{tripCategoryName} · {tripName}</strong>
-              <button className="scope-toggle" type="button" onClick={() => setActiveTab('trips')}>{t.backToTrips}</button>
-              <button className="scope-toggle active" type="button" onClick={() => { setTripScope(null); setSelectedPointId(null) }}>{t.showDateRange} ×</button>
-            </>}
-            {placeScope && <button className={'scope-toggle' + (placeViewEnabled ? ' active' : '')} type="button" onClick={() => setPlaceViewEnabled(enabled => !enabled)}>{placeViewEnabled ? t.showCalendar + ' · ' + scopeName + ' ×' : t.showAgain + ' · ' + scopeName}</button>}
-          </div>}
-
-          <section className="summary-section">
-            <div className="section-title-row">
-              <h2>{t.summary}</h2>
-              <span className="summary-period">{tripScope ? t.selectedTrip : placeViewEnabled && placeScope ? (placeYear === 'all' ? t.wholeHistory : placeYear) : dateMode === 'day' ? t.selectedDay : t.selectedPeriod}</span>
+                <label className="import-button">
+                  {isDemo ? t.chooseFile : t.changeFile}
+                  <input
+                    type="file"
+                    accept=".json,application/json"
+                    onChange={event => { importFile(event.target.files?.[0]); event.target.value = '' }}
+                  />
+                </label>
+              </section>
+              {isDemo && <a className="sample-download" href={demoTimelineUrl} download="Timeline-example.json">{t.downloadSample}</a>}
+              {importStage && <div className="import-progress" role="status" aria-live="polite"><span className="places-spinner" /><span>{t[importStage]}</span><button type="button" onClick={cancelImport}>{t.cancel}</button></div>}
+              {error && <p className="error-message" role="alert">{t[error]}</p>}
+              {qualityNotice}
             </div>
-            <div className="summary-grid">
-              <div className="summary-card">
-                <span className="summary-metric-label"><Icon name="pin" />{t.points}</span>
-                <strong>{mapPoints.length.toLocaleString(locale)}</strong>
-              </div>
-              <div className="summary-card">
-                <span className="summary-metric-label"><Icon name="route" />{t.estimatedRoute}</span>
-                <strong className={'summary-distance' + (distanceValue.length > 9 ? ' compact' : '')} title={distanceLabel}>{distanceValue}<small> {distanceUnit}</small></strong>
-              </div>
-            </div>
-          </section>
 
-          <section className="activity-section">
-            <div className="point-list-card">
-              <div className="point-list-card-header">
-                <h2>{tripScope ? t.tripPoints : placeViewEnabled && placeScope ? `${t.pointsAt} ${scopeName}` : dateMode === 'day' ? t.dayPoints : t.periodPoints}</h2>
-                <span className="count-badge">{mapPoints.length.toLocaleString(locale)}</span>
+            <section className="date-section">
+              <div className="section-title-row">
+                <h2>{t.time}</h2>
+                <button className="quiet-button" type="button" onClick={() => {
+                  if (availableDays.length) {
+                    setDateMode('day')
+                    changeDay(availableDays[availableDays.length - 1]!)
+                  }
+                }}>{t.lastDay}</button>
               </div>
-              <PointList groups={pointGroups} selectedPointId={selectedPointId} onSelect={setSelectedPointId} language={language} expanded={isPointListExpanded} />
-              <button className="point-list-disclosure" type="button" aria-expanded={isPointListExpanded} aria-controls="point-list" aria-label={isPointListExpanded ? t.hidePoints : t.showPoints} title={isPointListExpanded ? t.hidePoints : t.showPoints} onClick={() => setIsPointListExpanded((expanded) => !expanded)}>
-                <span>{isPointListExpanded ? t.hidePoints : t.showPoints}</span><Icon name="down" className={'expand-chevron' + (isPointListExpanded ? ' expanded' : '')} />
-              </button>
-            </div>
-          </section>
 
+              <div className="segmented-control" role="tablist" aria-label={t.selectPeriod}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={dateMode === 'day'}
+                  className={dateMode === 'day' ? 'selected' : ''}
+                  onClick={() => { setDateMode('day'); setPlaceViewEnabled(false); setTripScope(null) }}
+                >{t.oneDay}</button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={dateMode === 'period'}
+                  className={dateMode === 'period' ? 'selected' : ''}
+                  onClick={() => { setDateMode('period'); setPlaceViewEnabled(false); setTripScope(null) }}
+                >{t.period}</button>
+              </div>
+
+              {dateMode === 'day' ? (
+                <div className="date-picker-wrap">
+                  <div className="date-nav">
+                    <button type="button" aria-label={t.previousDay} onClick={() => shiftDay(-1)} disabled={!previousDay}><Icon name="left" /></button>
+                    <label htmlFor="selected-day">{formatCalendarDate(selectedDate, locale)}</label>
+                    <button type="button" aria-label={t.nextDay} onClick={() => shiftDay(1)} disabled={!nextDay}><Icon name="right" /></button>
+                  </div>
+                  <input
+                    id="selected-day"
+                    className="date-input"
+                    type="date"
+                    value={selectedDate}
+                    min={availableDays[0]} max={availableDays[availableDays.length - 1]}
+                    onChange={event => changeDay(event.target.value)}
+                  />
+                  <div className="date-hint">{availableDays.length.toLocaleString(locale)} {t.recordedDays}</div>
+                </div>
+              ) : (
+                <div className="period-fields">
+                  <label>{t.from}<input type="date" value={fromDate} min={availableDays[0]} max={availableDays[availableDays.length - 1]} onChange={event => { const date = event.target.value; if (!date) return; setFromDate(date); if (date > toDate) setToDate(date); setPlaceViewEnabled(false); setTripScope(null); setSelectedPointId(null) }} /></label>
+                  <label>{t.to}<input type="date" value={toDate} min={fromDate} max={availableDays[availableDays.length - 1]} onChange={event => { const date = event.target.value; if (!date) return; setToDate(date); if (date < fromDate) setFromDate(date); setPlaceViewEnabled(false); setTripScope(null); setSelectedPointId(null) }} /></label>
+                  <p>{placeViewEnabled && placeScope ? mapPoints.length.toLocaleString(locale) + ' ' + (placeScope.kind === 'country' ? t.pointsInCountry : t.pointsInCity) : mapPoints.length.toLocaleString(locale) + ' ' + t.pointsInPeriod}</p>
+                </div>
+              )}
+            </section>
+
+            {(tripScope || placeScope) && <div className="scope-actions">
+              {tripScope && <>
+                <strong>{tripCategoryName} · {tripName}</strong>
+                <button className="scope-toggle" type="button" onClick={() => setActiveTab('trips')}>{t.backToTrips}</button>
+                <button className="scope-toggle active" type="button" onClick={() => { setTripScope(null); setSelectedPointId(null) }}>{t.showDateRange} ×</button>
+              </>}
+              {placeScope && <button className={'scope-toggle' + (placeViewEnabled ? ' active' : '')} type="button" onClick={() => setPlaceViewEnabled(enabled => !enabled)}>{placeViewEnabled ? t.showCalendar + ' · ' + scopeName + ' ×' : t.showAgain + ' · ' + scopeName}</button>}
+            </div>}
+
+            <section className="summary-section">
+              <div className="section-title-row">
+                <h2>{t.summary}</h2>
+                <span className="summary-period">{tripScope ? t.selectedTrip : placeViewEnabled && placeScope ? (placeYear === 'all' ? t.wholeHistory : placeYear) : dateMode === 'day' ? t.selectedDay : t.selectedPeriod}</span>
+              </div>
+              <div className="summary-grid">
+                <div className="summary-card">
+                  <span className="summary-metric-label"><Icon name="pin" />{t.points}</span>
+                  <strong>{mapPoints.length.toLocaleString(locale)}</strong>
+                </div>
+                <div className="summary-card">
+                  <span className="summary-metric-label"><Icon name="route" />{t.estimatedRoute}</span>
+                  <strong className={'summary-distance' + (distanceValue.length > 9 ? ' compact' : '')} title={distanceLabel}>{distanceValue}<small> {distanceUnit}</small></strong>
+                </div>
+              </div>
+            </section>
+
+            <section className="activity-section">
+              <div className="point-list-card">
+                <div className="point-list-card-header">
+                  <h2>{tripScope ? t.tripPoints : placeViewEnabled && placeScope ? `${t.pointsAt} ${scopeName}` : dateMode === 'day' ? t.dayPoints : t.periodPoints}</h2>
+                  <span className="count-badge">{mapPoints.length.toLocaleString(locale)}</span>
+                </div>
+                <PointList groups={pointGroups} selectedPointId={selectedPointId} onSelect={setSelectedPointId} language={language} expanded={isPointListExpanded} />
+                <button className="point-list-disclosure" type="button" aria-expanded={isPointListExpanded} aria-controls="point-list" aria-label={isPointListExpanded ? t.hidePoints : t.showPoints} title={isPointListExpanded ? t.hidePoints : t.showPoints} onClick={() => setIsPointListExpanded((expanded) => !expanded)}>
+                  <span>{isPointListExpanded ? t.hidePoints : t.showPoints}</span><Icon name="down" className={'expand-chevron' + (isPointListExpanded ? ' expanded' : '')} />
+                </button>
+              </div>
+            </section>
+          </div>
         </aside>
 
         <section className="map-area" data-background={mapBackground} aria-label={t.mapLabel}>
