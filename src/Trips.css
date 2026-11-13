@@ -9,6 +9,7 @@
 .trips-select.compact { gap: 4px; }
 .trips-select.compact select { min-width: 130px; height: 34px; font-size: 11px; }
 .trips-settings { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px 18px; margin-bottom: 20px; }
+.trips-select.trips-scope-select { display: none; }
 .trips-scope-switch { display: inline-flex; justify-self: start; max-width: 100%; align-items: stretch; min-width: 0; overflow-x: auto; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-muted); }
 .trips-scope-switch button { display: inline-flex; flex: none; align-items: center; gap: 9px; min-height: 34px; padding: 8px 16px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); font-size: 12px; font-weight: 500; cursor: pointer; }
 .trips-scope-switch button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px #00000012; }
@@ -190,9 +191,22 @@
 .home-location-dates input[type="date"] { padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }
 
 @media (max-width: 680px) {
-  .trips-page { padding-bottom: calc(var(--mobile-bottom) + 20px); }
+  .trips-page { padding-bottom: calc(var(--mobile-bottom) + 20px); overscroll-behavior: none; }
+  .trips-settings { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin: 10px 0 18px; }
+  .trips-home-controls { grid-row: auto; justify-self: end; flex-wrap: nowrap; gap: 6px; margin: 0; }
+  .trips-scope-switch { display: none; }
+  .trips-select.trips-scope-select { display: block; min-width: 0; }
+  .trips-scope-select select { width: 100%; max-width: 175px; min-width: 0; }
+  .trips-home-button { width: var(--touch-target); justify-content: center; padding: 0; }
+  .trips-home-button span { display: none; }
+  .trips-intro, .trips-radius-hint, .trips-hero > small, .trips-method,
+  .trips-favourites .trips-section-heading p, .trips-state > p:not([data-error-detail]) { display: none; }
   .trips-select.compact select { height: 46px; font-size: 13px; }
   .trips-home-button, .trips-scope-switch button, .trips-open-map, .trips-details-toggle {
     min-height: var(--touch-target);
   }
+}
+
+@media (max-width: 370px) {
+  .trips-radius > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }

@@ -163,6 +163,7 @@
 .statistics-power-distance strong { font-size: 22px; font-weight: 500; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
 .statistics-power-distance span { color: var(--text-secondary); font-size: 10px; }
 .statistics-power-circumference { margin: 14px 0 0; color: var(--text-tertiary); font-size: 10px; text-align: center; font-variant-numeric: tabular-nums; }
+.statistics-power-mobile-circumference, .statistics-clock-mobile-hint { display: none; }
 .statistics-power-empty { text-align: center; }
 .statistics-power-details { margin-top: 14px; }
 .statistics-power-details summary { color: var(--accent); font-size: 10px; text-align: center; cursor: pointer; }
@@ -284,4 +285,25 @@
   .statistics-clock > .statistics-note, .statistics-power-empty { margin-top: 5px; }
   .statistics-clock .statistics-empty.small { min-height: 68px; padding: 5px; }
   .statistics-hour-details > div { grid-template-columns: minmax(0, 1fr); }
+}
+
+
+@media (max-width: 680px) {
+  .statistics-page { overflow-x: hidden; overscroll-behavior: none; touch-action: pan-y pinch-zoom; }
+  .statistics-container, .statistics-layout, .statistics-calendar-tile { min-width: 0; }
+  .statistics-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .statistics-clock, .statistics-human-powered { grid-column: span 1; width: 100%; }
+  .statistics-card { overflow-wrap: anywhere; }
+  .statistics-distance > strong { white-space: normal; overflow-wrap: anywhere; }
+  .statistics-clock-summary { text-align: center; }
+  .statistics-clock > .statistics-note, .statistics-power-distance span, .statistics-power-circumference { display: none; }
+  .statistics-power-mobile-circumference, .statistics-clock-mobile-hint { display: block; }
+}
+
+@media (max-width: 680px) {
+  .statistics-card-heading p, .statistics-note, .statistics-footnote,
+  .statistics-power-details, .statistics-transport-details,
+  .statistics-state:not([role="alert"]) > p { display: none; }
+  .statistics-new-footer:has(.statistics-pagination) { align-items: flex-end; }
+  .statistics-new-footer:not(:has(.statistics-pagination)) { display: none; }
 }

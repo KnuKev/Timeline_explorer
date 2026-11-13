@@ -295,11 +295,11 @@ function ViewportAndControls({ points, selectedPoint, language, active }: { poin
   const fitLabel = t.fitSelection
   return <div ref={controls} className="map-zoom-controls">
     <button type="button" aria-label={fitLabel} title={fitLabel} onClick={fit} disabled={!points.length}><Icon name="fit" /></button>
-    <button type="button" aria-label={t.zoomIn} title={t.zoomIn} onClick={() => {
+    <button className="map-zoom-step" type="button" aria-label={t.zoomIn} title={t.zoomIn} onClick={() => {
       if (map.getZoom() === overview.current?.zoom) map.setView([0, map.getCenter().lng], map.getZoom() + 1)
       else map.zoomIn()
     }}><Icon name="plus" /></button>
-    <button type="button" aria-label={t.zoomOut} title={t.zoomOut} onClick={() => map.zoomOut()}><Icon name="minus" /></button>
+    <button className="map-zoom-step" type="button" aria-label={t.zoomOut} title={t.zoomOut} onClick={() => map.zoomOut()}><Icon name="minus" /></button>
   </div>
 }
 

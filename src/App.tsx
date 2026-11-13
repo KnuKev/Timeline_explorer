@@ -62,6 +62,7 @@ function App() {
     fromHandle: boolean
     startY: number
     startHeight: number
+    startScroll: number
     positions: [number, number, number]
     samples: { y: number; time: number }[]
   } | null>(null)
@@ -71,7 +72,8 @@ function App() {
     if (!event.isPrimary || event.button !== 0 || !sheet.current || !shell.current || !(event.target instanceof Element)) return
     ignoreHandleClick.current = false
     const fromHandle = Boolean(event.target.closest('.sheet-handle'))
-    if (!fromHandle && (sheetSize === 'expanded' || event.target.closest('input, select, textarea'))) return
+    if (!fromHandle && event.target.closest('input, select, textarea')) return
+    if (!fromHandle && sheetSize === 'expanded' && event.pointerType !== 'touch') return
     if (getComputedStyle(event.currentTarget).touchAction !== 'none' && !fromHandle) return
     const style = getComputedStyle(sheet.current)
     const min = parseFloat(style.minHeight)
@@ -82,6 +84,7 @@ function App() {
       fromHandle,
       startY: event.clientY,
       startHeight: sheet.current.getBoundingClientRect().height,
+      startScroll: fromHandle ? 0 : sheetContent.current?.scrollTop ?? 0,
       positions: [min, half, max],
       samples: [{ y: event.clientY, time: event.timeStamp }],
     }
@@ -98,11 +101,11 @@ function App() {
     drag.samples = drag.samples.filter(sample => event.timeStamp - sample.time <= 100)
     drag.samples.push({ y: event.clientY, time: event.timeStamp })
     shell.current.dataset.sheetDragging = 'true'
-    const height = drag.startHeight + distance
+    const height = drag.startHeight + distance + drag.startScroll
     shell.current.style.setProperty('--sheet-drag-height', `${height}px`)
     if (!drag.fromHandle && sheetContent.current) {
       const overflow = Math.max(0, height - drag.positions[2])
-      shell.current.toggleAttribute('data-sheet-at-top', overflow > 0)
+      shell.current.toggleAttribute('data-sheet-at-top', height >= drag.positions[2])
       sheetContent.current.scrollTop = overflow
     }
   }
@@ -118,7 +121,7 @@ function App() {
       const sample = drag.samples.find(entry => event.timeStamp - entry.time <= 100)
       const velocity = sample ? (sample.y - event.clientY) / Math.max(1, event.timeStamp - sample.time) : 0
       const [compact, middle, expanded] = drag.positions
-      const height = drag.startHeight + distance
+      const height = drag.startHeight + distance + drag.startScroll
       const middleLower = middle - (middle - compact) * .6
       const middleUpper = middle + (expanded - middle) * .6
       // A release close to the middle wins over residual swipe momentum.
@@ -439,7 +442,7 @@ function App() {
           {!placesLoading && !placesError && places.length === 0 && <div className="places-empty"><Icon name="globe" /><strong>{placeYear === 'all' ? t.noPlaces : t.noPlacesForYear}</strong>{placeYear === 'all' && <><p>{t.importForPlaces}</p><button type="button" className="primary-button" onClick={() => setActiveTab('map')}>{t.goToMap}</button></>}</div>}
           {!placesLoading && !placesError && mainPlaces.length > 0 && <div className="places-grid">{mainPlaces.map(renderPlaceCard)}</div>}
           {!placesLoading && !placesError && fewerPlaces.length > 0 && <details key={placeMode} className="fewer-places"><summary><span>{placeMode === 'countries' ? t.fewerCountries : t.fewerPlaces}</span><span className="count-badge">{fewerPlaces.length.toLocaleString(locale)}</span></summary><p>{t.fewerPlacesHint}</p><div className="places-grid">{fewerPlaces.map((place, index) => renderPlaceCard(place, mainPlaces.length + index))}</div></details>}
-          <footer className="places-attribution">{t.citySuggestions} <a href="https://www.geonames.org/" target="_blank" rel="noreferrer">GeoNames</a> (CC BY 4.0) · {t.geodataDetails.replace('{distance}', formatLargeDistance(30, locale, distanceUnits))}</footer>
+          <footer className="places-attribution"><span className="mobile-hide-copy">{t.citySuggestions} </span><a href="https://www.geonames.org/" target="_blank" rel="noreferrer">GeoNames</a> (CC BY 4.0)<span className="mobile-hide-copy"> · {t.geodataDetails.replace('{distance}', formatLargeDistance(30, locale, distanceUnits))}</span></footer>
         </div>
       )}
       {tripsRequested && <div className="trips-workspace" hidden={activeTab !== 'trips'}>
@@ -481,7 +484,7 @@ function App() {
                 <div className="import-icon"><Icon name="upload" /></div>
                 <div className="import-copy">
                   <strong title={fileName || t.importTimeline}>{fileName || t.importTimeline}</strong>
-                  <span>{isDemo ? t.sampleHint : t.fileLoaded}</span>
+                  <span className={isDemo ? "mobile-hide-copy" : undefined}>{isDemo ? t.sampleHint : t.fileLoaded}</span>
                 </div>
                 <label className="import-button">
                   {isDemo ? t.chooseFile : t.changeFile}
@@ -498,7 +501,7 @@ function App() {
               {qualityNotice}
             </div>
 
-            <section className="date-section">
+            <section className="date-section" data-date-mode={dateMode}>
               <div className="section-title-row">
                 <h2>{t.time}</h2>
                 <button className="quiet-button" type="button" onClick={() => {

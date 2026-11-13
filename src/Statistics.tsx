@@ -117,7 +117,7 @@ const HumanPowered = memo(function HumanPowered({ period, language, t, distanceU
     <div className="statistics-power-distance"><strong>{distanceLabel}</strong><span>{t.powerRecorded}</span></div>
     {distance === 0 && <p className="statistics-note statistics-power-empty">{t.powerEmpty}</p>}
     <p className="statistics-power-circumference">{t.powerOneLap.replace('{distance}', circumferenceLabel)}</p>
-    <details className="statistics-power-details"><summary>{t.powerDetails}</summary><p className="statistics-note">{t.powerHint}</p><p className="statistics-note">{t.powerComparisonHint} <a href="https://ssd.jpl.nasa.gov/sats/phys_par/" target="_blank" rel="noreferrer">NASA/JPL</a>.</p></details>
+    <details className="statistics-power-details"><summary>{t.powerDetails}</summary><p className="statistics-note statistics-power-mobile-circumference">{t.powerOneLap.replace('{distance}', circumferenceLabel)}</p><p className="statistics-note">{t.powerHint}</p><p className="statistics-note">{t.powerComparisonHint} <a href="https://ssd.jpl.nasa.gov/sats/phys_par/" target="_blank" rel="noreferrer">NASA/JPL</a>.</p></details>
   </article>
 })
 
@@ -188,7 +188,7 @@ const MovementClock = memo(function MovementClock({ period, language, t }: Perio
         <text x="150" y="180" textAnchor="middle" className="statistics-clock-total">{t.localTime}</text>
       </svg>
       <div className="statistics-clock-summary"><strong>{minutesLabel(total, locale, t)}</strong><span>{t.movement}</span></div>
-      <details className="statistics-hour-details"><summary>{t.hourlyDetails}</summary><div>{hours.map((minutes, hour) => <span key={hour}><strong>{range(hour)}</strong>{minutesLabel(minutes, locale, t)}</span>)}</div></details>
+      <details className="statistics-hour-details"><summary>{t.hourlyDetails}</summary><div>{hours.map((minutes, hour) => <span key={hour}><strong>{range(hour)}</strong>{minutesLabel(minutes, locale, t)}</span>)}</div><p className="statistics-note statistics-clock-mobile-hint">{t.clockHint}</p></details>
     </> : <div className="statistics-empty small"><Icon name="chart" /><p>{t.clockEmpty}</p></div>}
     <p className="statistics-note">{t.clockHint}</p>
   </article>

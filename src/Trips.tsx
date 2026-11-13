@@ -126,11 +126,11 @@ function TripHistory({ trips, groups, scope, locale, t, regionNames, onOpenTrip 
       })}</div>
     </section>}
     <section className="trips-recents" id={recentId} aria-label={t.recents}>
-      <div className="trips-section-heading"><div><h2 id={`${recentId}-heading`}>{t.recents} <span>{recentTrips.length.toLocaleString(locale)}</span></h2><p aria-live="polite">{destination ? `${t.showingDestination} ${placeName(destination, regionNames)}${city ? ` · ${city.name}` : ''}` : t.recentsIntro}</p></div><div className="trips-history-controls">{destination && <button type="button" className="trips-clear-filter" onClick={() => filterDestination(null)}>{t.showAllTrips}<Icon name="close" /></button>}<Pagination page={page} pages={pages} onChange={changePage} t={t} /></div></div>
+      <div className="trips-section-heading"><div><h2 id={`${recentId}-heading`}>{t.recents} <span>{recentTrips.length.toLocaleString(locale)}</span></h2><p className={destination ? undefined : "mobile-hide-copy"} aria-live="polite">{destination ? `${t.showingDestination} ${placeName(destination, regionNames)}${city ? ` · ${city.name}` : ''}` : t.recentsIntro}</p></div><div className="trips-history-controls">{destination && <button type="button" className="trips-clear-filter" onClick={() => filterDestination(null)}>{t.showAllTrips}<Icon name="close" /></button>}<Pagination page={page} pages={pages} onChange={changePage} t={t} /></div></div>
       {isInternational && groups.length > 0 && <div className="trips-country-filters">
         <label className="trips-select compact"><span>{t.country}</span><select value={destination?.key ?? ''} onChange={event => filterDestination(event.target.value || null)}><option value="">{t.allCountries}</option>{groups.map(item => <option key={item.destination.key} value={item.destination.key}>{placeName(item.destination, regionNames)} ({item.trips.length})</option>)}</select></label>
         {group && group.cities.length > 0 && <label className="trips-select compact"><span>{t.city}</span><select value={city?.key ?? ''} onChange={event => filterCity(event.target.value || null)}><option value="">{t.allCities}</option>{group.cities.map(entry => <option key={entry.destination.key} value={entry.destination.key}>{entry.destination.name} ({entry.count})</option>)}</select></label>}
-        <span>{t.countryFilterHint}</span>
+        <span className="mobile-hide-copy">{t.countryFilterHint}</span>
       </div>}
       <ol className="trips-recent-list">{recentTrips.slice(page * TRIP_PAGE_SIZE, (page + 1) * TRIP_PAGE_SIZE).map(trip => <TripRow key={trip.id} trip={trip} locale={locale} t={t} regionNames={regionNames} onOpenTrip={onOpenTrip} />)}</ol>
       {pages > 1 && <div className="trips-list-footer"><span>{page * TRIP_PAGE_SIZE + 1}–{Math.min((page + 1) * TRIP_PAGE_SIZE, recentTrips.length)} {t.of} {recentTrips.length.toLocaleString(locale)} {t.trips}</span><Pagination page={page} pages={pages} onChange={changePage} t={t} /></div>}
@@ -159,6 +159,7 @@ export default function Trips({ data, loading, error, language, isDemo = false, 
   const groups = useMemo(() => groupTripHistory(trips, scope), [trips, scope])
   const totalNights = useMemo(() => trips.reduce((sum, trip) => sum + trip.nights, 0), [trips])
   const ready = !pending && !error && currentData !== null
+  const scopes: TripScope[] = counts.unknown ? ['domestic', 'international', 'unknown'] : ['domestic', 'international']
   const scopeLabels = { domestic: t.domestic, international: t.international, unknown: t.unknownScope }
 
   return <section className="trips-page" aria-label={t.title}><div className="trips-container">
@@ -169,15 +170,22 @@ export default function Trips({ data, loading, error, language, isDemo = false, 
     <p className="trips-intro">{t.intro}</p>
     <div className="trips-settings">
       <p className="trips-radius-hint" id={radiusHintId}>{t.radiusHint.replace('{radius}', formatLargeDistance(homeRadiusKm, locale, distanceUnits))}</p>
-      <div className="trips-scope-switch" role="group" aria-label={t.tripScope}>{(['domestic', 'international', ...(counts.unknown ? ['unknown'] : [])] as TripScope[]).map(candidate => <button type="button" key={candidate} disabled={!ready} aria-pressed={scope === candidate} onClick={() => setScope(candidate)}>{scopeLabels[candidate]}{ready && <span>{counts[candidate].toLocaleString(locale)}</span>}</button>)}</div>
+      <div className="trips-scope-switch" role="group" aria-label={t.tripScope}>
+        {scopes.map(candidate => <button type="button" key={candidate} disabled={!ready} aria-pressed={scope === candidate} onClick={() => setScope(candidate)}>{scopeLabels[candidate]}{ready && <span>{counts[candidate].toLocaleString(locale)}</span>}</button>)}
+      </div>
+      <label className="trips-select compact trips-scope-select">
+        <select aria-label={t.tripScope} value={scope} disabled={!ready} onChange={event => setScope(event.target.value as TripScope)}>
+          {scopes.map(candidate => <option key={candidate} value={candidate}>{scopeLabels[candidate]}</option>)}
+        </select>
+      </label>
       <div className="trips-home-controls">
         <label className="trips-select compact trips-radius"><span>{t.homeRadius}</span><select aria-describedby={radiusHintId} value={homeRadiusKm} onChange={event => onHomeRadiusChange(Number(event.target.value))}>{radiusOptions.map(radius => <option key={radius} value={radius}>{formatLargeDistance(radius, locale, distanceUnits)}</option>)}</select></label>
-        {onEditHome && <button type="button" className="trips-home-button" aria-haspopup="dialog" onClick={onEditHome}>
-          <Icon name="pin" />{hasManualHome ? t.editHomeLocation : t.setHomeLocation}
+        {onEditHome && <button type="button" className="trips-home-button" aria-haspopup="dialog" aria-label={hasManualHome ? t.editHomeLocation : t.setHomeLocation} title={hasManualHome ? t.editHomeLocation : t.setHomeLocation} onClick={onEditHome}>
+          <Icon name="pin" /><span>{hasManualHome ? t.editHomeLocation : t.setHomeLocation}</span>
         </button>}
       </div>
     </div>
-    {pending ? <div className="trips-state" role="status"><span className="trips-spinner" /><h2>{t.loading}</h2><p>{t.loadingHint}</p></div> : error ? <div className="trips-state" role="alert"><Icon name="route" /><h2>{t.error}</h2><p>{error}</p><button type="button" className="primary-button" onClick={onRetry}>{t.retry}</button></div> : !currentData ? <div className="trips-state"><Icon name="route" /><h2>{t.noData}</h2><p>{t.noDataHint}</p></div> : currentData.homeStatus === 'missing' ? <div className="trips-state trips-empty"><Icon name="pin" /><h2>{t.homeMissing}</h2><p>{t.homeMissingHint}</p></div> : yearTrips.length === 0 ? <div className="trips-state trips-empty"><Icon name="route" /><h2>{t.noTrips}</h2><p>{t.noTripsHint}</p></div> : <>
+    {pending ? <div className="trips-state" role="status"><span className="trips-spinner" /><h2>{t.loading}</h2><p>{t.loadingHint}</p></div> : error ? <div className="trips-state" role="alert"><Icon name="route" /><h2>{t.error}</h2><p data-error-detail>{error}</p><button type="button" className="primary-button" onClick={onRetry}>{t.retry}</button></div> : !currentData ? <div className="trips-state"><Icon name="route" /><h2>{t.noData}</h2><p>{t.noDataHint}</p></div> : currentData.homeStatus === 'missing' ? <div className="trips-state trips-empty"><Icon name="pin" /><h2>{t.homeMissing}</h2><p>{t.homeMissingHint}</p></div> : yearTrips.length === 0 ? <div className="trips-state trips-empty"><Icon name="route" /><h2>{t.noTrips}</h2><p>{t.noTripsHint}</p></div> : <>
       <div className="trips-overview" aria-label={`${t.overview}: ${scopeLabels[scope]}`}>
         <div className="trips-hero"><span><Icon name="route" />{t.completedTrips}</span><strong>{trips.length.toLocaleString(locale)}</strong><small>{t.completedHint}</small></div>
         <div className="trips-metric"><Icon name="moon" /><strong>{totalNights.toLocaleString(locale)}</strong><span>{t.nights}</span></div>
