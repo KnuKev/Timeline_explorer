@@ -1,13 +1,13 @@
 import { feature } from 'topojson-client'
 import worldAtlas from 'world-atlas/countries-10m.json'
 import type { Topology } from 'topojson-specification'
-import { analysePlaces, type CountryFeature, type CityReference, type PlaceAnalysis } from './places'
+import { analysePlaces, countryCodeAt, type CountryFeature, type CityReference, type PlaceAnalysis } from './places'
 import type { TimelinePoint } from './timeline'
 import type { IndexedDay } from './timelineIndex'
 import { buildStatistics, type StatisticsAnalysis } from './statistics'
 import { buildTrips, type TripsAnalysis, type TripLocalityResolver } from './trips'
 import { createTripLocalityResolver, type TripLocalityReference } from './tripLocalities'
-import { normalizeHomeRadius } from './tripSettings'
+import { normalizeHomeRadius, type DatedHomeLocation } from './tripSettings'
 
 const topology = worldAtlas as unknown as Topology
 const countries = (feature(topology, topology.objects.countries) as unknown as { features: CountryFeature[] }).features
@@ -32,7 +32,7 @@ function loadTripLocalities(cities: CityReference[]) {
   return tripLocalities
 }
 
-type Request = { type: 'dataset'; points: TimelinePoint[]; days?: IndexedDay[]; excludedIds: string[] } | { type: 'analyse'; requestId: number; includeSuspect: boolean; includeStatistics?: boolean; includeTrips?: boolean; homeRadiusKm?: number }
+type Request = { type: 'dataset'; points: TimelinePoint[]; days?: IndexedDay[]; excludedIds: string[] } | { type: 'analyse'; requestId: number; includeSuspect: boolean; includeStatistics?: boolean; includeTrips?: boolean; homeRadiusKm?: number; homeLocations?: DatedHomeLocation[] }
 self.onmessage = async (event: MessageEvent<Request>) => {
   const message = event.data
   if (message.type === 'dataset') {
@@ -79,10 +79,15 @@ self.onmessage = async (event: MessageEvent<Request>) => {
     let trips: TripsAnalysis | undefined
     if (message.includeTrips) {
       const homeRadiusKm = normalizeHomeRadius(message.homeRadiusKm)
-      const cacheKey = `${message.includeSuspect}:${homeRadiusKm}`
+      const { homeLocations = [] } = message
+      const cacheKey = `${message.includeSuspect}:${homeRadiusKm}:${JSON.stringify(homeLocations)}`
       trips = current.trips.get(cacheKey)
       if (!trips) {
-        trips = buildTrips(message.includeSuspect ? current.points : current.cleanPoints, current.points, data, resolveTripLocality, { homeRadiusKm })
+        const homes = homeLocations.map(home => ({
+          ...home,
+          countryCode: countryCodeAt({ ...home, id: '', label: '', timestamp: '', kind: 'visit' }, ...refs, countries),
+        }))
+        trips = buildTrips(message.includeSuspect ? current.points : current.cleanPoints, current.points, data, resolveTripLocality, { homeRadiusKm, homes })
         if (current.trips.size >= 6) current.trips.delete(current.trips.keys().next().value!)
         current.trips.set(cacheKey, trips)
       }

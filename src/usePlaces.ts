@@ -4,12 +4,12 @@ import type { PlaceAnalysis } from './places'
 import type { TranslationKey } from './i18n'
 import type { StatisticsAnalysis } from './statistics'
 import type { TripsAnalysis } from './trips'
-import { DEFAULT_HOME_RADIUS_KM } from './tripSettings'
+import { DEFAULT_HOME_RADIUS_KM, type DatedHomeLocation } from './tripSettings'
 
 type Response = { requestId: number; data: PlaceAnalysis; statistics?: StatisticsAnalysis; trips?: TripsAnalysis } | { requestId: number; error: TranslationKey }
-type Result = { dataset: TimelineDataset; includeSuspect: boolean; homeRadiusKm: number; attempt: number; data?: PlaceAnalysis; statistics?: StatisticsAnalysis; trips?: TripsAnalysis; error?: TranslationKey }
+type Result = { dataset: TimelineDataset; includeSuspect: boolean; homeRadiusKm: number; homeLocations?: readonly DatedHomeLocation[]; attempt: number; data?: PlaceAnalysis; statistics?: StatisticsAnalysis; trips?: TripsAnalysis; error?: TranslationKey }
 
-export function usePlaces(dataset: TimelineDataset, includeSuspect: boolean, enabled: boolean, includeStatistics = false, includeTrips = false, homeRadiusKm = DEFAULT_HOME_RADIUS_KM) {
+export function usePlaces(dataset: TimelineDataset, includeSuspect: boolean, enabled: boolean, includeStatistics = false, includeTrips = false, homeRadiusKm = DEFAULT_HOME_RADIUS_KM, homeLocations?: readonly DatedHomeLocation[]) {
   const workerRef = useRef<Worker | null>(null)
   const sentDataset = useRef<TimelineDataset | null>(null)
   const requestId = useRef(0)
@@ -30,14 +30,14 @@ export function usePlaces(dataset: TimelineDataset, includeSuspect: boolean, ena
       workerRef.current = worker
       const onMessage = (event: MessageEvent<Response>) => {
         if (event.data.requestId !== requestId.current) return
-        setResult({ dataset, includeSuspect, homeRadiusKm, attempt: retryCount, ...('data' in event.data ? { data: event.data.data, statistics: event.data.statistics, trips: event.data.trips } : { error: event.data.error }) })
+        setResult({ dataset, includeSuspect, homeRadiusKm, homeLocations, attempt: retryCount, ...('data' in event.data ? { data: event.data.data, statistics: event.data.statistics, trips: event.data.trips } : { error: event.data.error }) })
       }
       const onError = () => {
         if (requestId.current !== id) return
         worker.terminate()
         workerRef.current = null
         sentDataset.current = null
-        setResult({ dataset, includeSuspect, homeRadiusKm, attempt: retryCount, error: 'placesAnalysisError' })
+        setResult({ dataset, includeSuspect, homeRadiusKm, homeLocations, attempt: retryCount, error: 'placesAnalysisError' })
       }
       worker.addEventListener('message', onMessage)
       worker.addEventListener('error', onError)
@@ -45,7 +45,7 @@ export function usePlaces(dataset: TimelineDataset, includeSuspect: boolean, ena
         worker.postMessage({ type: 'dataset', points: dataset.points, days: dataset.days, excludedIds: dataset.excluded.map(entry => entry.point.id) })
         sentDataset.current = dataset
       }
-      worker.postMessage({ type: 'analyse', requestId: id, includeSuspect, includeStatistics, includeTrips, homeRadiusKm })
+      worker.postMessage({ type: 'analyse', requestId: id, includeSuspect, includeStatistics, includeTrips, homeRadiusKm, homeLocations })
       return () => {
         worker.removeEventListener('message', onMessage)
         worker.removeEventListener('error', onError)
@@ -55,12 +55,12 @@ export function usePlaces(dataset: TimelineDataset, includeSuspect: boolean, ena
       workerRef.current = null
       sentDataset.current = null
       queueMicrotask(() => {
-        if (requestId.current === id) setResult({ dataset, includeSuspect, homeRadiusKm, attempt: retryCount, error: 'placesAnalysisError' })
+        if (requestId.current === id) setResult({ dataset, includeSuspect, homeRadiusKm, homeLocations, attempt: retryCount, error: 'placesAnalysisError' })
       })
     }
-  }, [dataset, includeSuspect, enabled, includeStatistics, includeTrips, homeRadiusKm, retryCount])
+  }, [dataset, includeSuspect, enabled, includeStatistics, includeTrips, homeRadiusKm, homeLocations, retryCount])
   const matches = result?.dataset === dataset && result.includeSuspect === includeSuspect && result.attempt === retryCount
-  const tripsMatch = matches && result.homeRadiusKm === homeRadiusKm
+  const tripsMatch = matches && result.homeRadiusKm === homeRadiusKm && result.homeLocations === homeLocations
   const error: TranslationKey | '' = tripsMatch ? result.error ?? '' : ''
   return { data: matches ? result.data ?? null : null, statistics: matches ? result.statistics ?? null : null, trips: tripsMatch ? result.trips ?? null : null, error,
     loading: enabled && (!matches || (!result.data && !error)),

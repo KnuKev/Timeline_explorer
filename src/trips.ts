@@ -3,14 +3,14 @@ import type { TimelinePoint } from './timeline.ts'
 import { distanceKm } from './timeline.ts'
 import { buildRouteSegments } from './routes.ts'
 import type { PlaceAnalysis, PlaceEntry } from './places.ts'
-import { normalizeHomeRadius } from './tripSettings.ts'
+import { normalizeHomeRadius, type DatedHomeLocation } from './tripSettings.ts'
 
 export type TripDestination = { key: string; name: string; countryCode?: string; kind: 'city' | 'country' | 'place' | 'itinerary'; locality?: string; region?: string; lat?: number; lng?: number }
 export type TripLocalityResolver = (point: Pick<TimelinePoint, 'lat' | 'lng'>, countryCode?: string) => { name: string; countryCode?: string; region?: string; distanceKm?: number } | undefined
 export type TimelineTrip = { id: string; destination: TripDestination; category: 'destination' | 'roadtrip' | 'multi-stop'; scope: 'domestic' | 'international' | 'unknown'; hasFlight: boolean; homeKey?: string; homeCountryCode?: string; countryCodes: string[]; startTimestamp: string; endTimestamp: string; startDate: string; endDate: string; nights: number; distanceKm: number; places: TripDestination[]; pointIds: string[]; mapPointIds?: string[] }
 export type TripDestinationGroup = { destination: TripDestination; trips: TimelineTrip[]; totalNights: number; totalDistanceKm: number; lastStartDate: string }
 export type TripHome = { key: string; name?: string; countryCode?: string; startDate: string; lat: number; lng: number; recordedNights: number; explicit: boolean }
-export type TripOptions = { homeRadiusKm?: number }
+export type TripOptions = { homeRadiusKm?: number; homes?: readonly (DatedHomeLocation & { countryCode?: string })[] }
 export type TripsAnalysis = { homeStatus: 'detected' | 'missing'; homeCount: number; homeRadiusKm: number; homes: TripHome[]; trips: TimelineTrip[]; groups: TripDestinationGroup[] }
 
 const HOUR = 3_600_000
@@ -23,7 +23,7 @@ const MAX_VISIT_EVIDENCE = 90 * DAY
 const CELL = HOME_RADIUS_KM / 6371
 type Night = { date: string; day: number; at: number; instant: number }
 type HomeCluster = { id: number; point: TimelinePoint; nights: Map<string, Night>; explicit: Map<string, number> }
-type HomeProfile = { at: number; cluster: HomeCluster; zone: string; recordedNights: number; explicit: boolean }
+type HomeProfile = { at: number; cluster: HomeCluster; zone: string; recordedNights: number; explicit: boolean; manual?: { countryCode?: string } }
 const empty = (homeRadiusKm: number): TripsAnalysis => ({ homeStatus: 'missing', homeCount: 0, homeRadiusKm, homes: [], trips: [], groups: [] })
 
 function homeLabel(point: TimelinePoint): boolean {
@@ -54,8 +54,8 @@ function calendarTools() {
     for (const part of formatter.formatToParts(time)) if (part.type !== 'literal') parts[part.type] = part.value
     return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour), minute: Number(parts.minute), second: Number(parts.second) }
   }
-  const nightInstant = (date: string, zone: string) => {
-    const desired = Date.parse(`${date}T04:00:00Z`)
+  const localInstant = (date: string, zone: string, hour = 4) => {
+    const desired = Date.parse(date) + hour * HOUR
     let time = desired
     for (let iteration = 0; iteration < 3; iteration++) {
       const part = local(time, zone)
@@ -79,14 +79,14 @@ function calendarTools() {
       const last = Date.parse(`${local(end - 1, zone).date}T00:00:00Z`)
       for (let day = first; day <= last && day <= first + 91 * DAY; day += DAY) {
         const date = new Date(day).toISOString().slice(0, 10)
-        const at = nightInstant(date, zone)
+        const at = localInstant(date, zone)
         if (at >= start && at < end) result.push({ date, day, at: start, instant: at })
       }
     }
     nightCache.set(point, result)
     return result
   }
-  return { zoneAt, local, nightsAt, nightInstant }
+  return { zoneAt, local, nightsAt, localInstant }
 }
 
 function clusterIndex() {
@@ -309,7 +309,22 @@ function homeProfiles(points: TimelinePoint[], calendar: ReturnType<typeof calen
 export function buildTrips(points: TimelinePoint[], allPoints: TimelinePoint[], places: PlaceAnalysis, resolveLocality?: TripLocalityResolver, options: TripOptions = {}): TripsAnalysis {
   const homeRadiusKm = normalizeHomeRadius(options.homeRadiusKm)
   const calendar = calendarTools()
-  const profiles = homeProfiles(points, calendar)
+  const first = points[0]
+  const manualProfiles: HomeProfile[] = first ? (options.homes ?? []).map(home => {
+    const point: TimelinePoint = { lat: home.lat, lng: home.lng, id: '', timestamp: first.timestamp, kind: 'visit', label: '' }
+    const zone = calendar.zoneAt(point)
+    return {
+      at: home.from ? calendar.localInstant(home.from, zone, 0) : -Infinity,
+      cluster: { id: 0, point, nights: new Map(), explicit: new Map() },
+      zone,
+      recordedNights: 0,
+      explicit: true,
+      manual: { countryCode: home.countryCode },
+    }
+  }).filter(home => home.at <= Date.parse(points.at(-1)!.timestamp)).sort((a, b) => a.at - b.at) : []
+  const manualStart = manualProfiles[0]?.at ?? Infinity
+  const profiles = manualStart <= Date.parse(first?.timestamp ?? '') ? manualProfiles
+    : [...homeProfiles(points, calendar).filter(home => home.at < manualStart), ...manualProfiles]
   if (!profiles.length) return empty(homeRadiusKm)
   const cityForPoint = new Map<string, PlaceEntry>()
   const countryForPoint = new Map<string, PlaceEntry>()
@@ -318,10 +333,10 @@ export function buildTrips(points: TimelinePoint[], allPoints: TimelinePoint[], 
   const countryAt = (point: TimelinePoint) => countryForPoint.get(point.id)?.countryCode ?? cityForPoint.get(point.id)?.countryCode
   const homes: TripHome[] = profiles.map(home => {
     const point = home.cluster.point
-    const countryCode = countryAt(point)
+    const countryCode = home.manual ? home.manual.countryCode : countryAt(point)
     const local = resolveLocality?.(point, countryCode)
-    return { key: `home:${point.lat.toFixed(5)}:${point.lng.toFixed(5)}`, name: local?.name ?? cityForPoint.get(point.id)?.name, countryCode: countryCode ?? local?.countryCode,
-      startDate: calendar.local(home.at, home.zone).date, lat: point.lat, lng: point.lng, recordedNights: home.recordedNights, explicit: home.explicit }
+    return { key: `home:${point.lat.toFixed(5)}:${point.lng.toFixed(5)}`, name: local?.name ?? cityForPoint.get(point.id)?.name, countryCode: home.manual ? countryCode : countryCode ?? local?.countryCode,
+      startDate: calendar.local(home.at === -Infinity ? Date.parse(first!.timestamp) : home.at, home.zone).date, lat: point.lat, lng: point.lng, recordedNights: home.recordedNights, explicit: home.explicit }
   })
   const homeCountry = new Map(profiles.map((home, index) => [home, homes[index]!.countryCode]))
   const homeKeys = new Map(profiles.map((home, index) => [home, homes[index]!.key]))

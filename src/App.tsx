@@ -3,7 +3,7 @@ import { parseTimeline, type TimelinePoint } from './timeline'
 import { demoTimeline, demoStartDate, demoEndDate } from './demoTimeline'
 import { selectPlacesYear, type PlaceEntry } from './places'
 import type { TimelineTrip } from './trips'
-import { getStoredHomeRadius, homeRadiusForUnits, homeRadiusStorageKey, normalizeHomeRadius } from './tripSettings'
+import { demoHomeLocationStorageKey, getStoredHomeLocations, homeLocationStorageKey, type DatedHomeLocation, getStoredHomeRadius, homeRadiusForUnits, homeRadiusStorageKey, normalizeHomeRadius } from './tripSettings'
 import { getStoredLanguage, languageStorageKey, locales, pointLabel, translations, type Language } from './i18n'
 import { buildRouteSegments } from './routes'
 import { prepareTimeline, selectTimelineRange, groupTimelineSelection, adjacentRecordedDay, type TimelineDataset } from './timelineIndex'
@@ -14,6 +14,7 @@ import { getMapColors, getStoredMapBackground, mapBackgroundStorageKey } from '.
 import PointList from './PointList'
 import Icon from './Icon'
 import SettingsMenu from './SettingsMenu'
+import HomeLocationDialog from './HomeLocationDialog'
 import { distanceUnitsStorageKey, formatCalendarDate, formatPlaceDate, formatPointInterval, formatDistance, formatLargeDistance, getStoredDistanceUnits } from './formatting'
 import './App.css'
 
@@ -79,6 +80,10 @@ function App() {
   const [placeScope, setPlaceScope] = useState<PlaceScope | null>(null)
   const [placeViewEnabled, setPlaceViewEnabled] = useState(false)
   const [isDemo, setIsDemo] = useState(true)
+  const [storedHome, setStoredHome] = useState(getStoredHomeLocations)
+  const [demoHome, setDemoHome] = useState(() => getStoredHomeLocations(demoHomeLocationStorageKey))
+  const [homeDialogOpen, setHomeDialogOpen] = useState(false)
+  const homeLocations = isDemo ? demoHome : storedHome
   const [isDark, setIsDark] = useState(() => { try { return localStorage.getItem('timeline-explorer-dark') === 'true' } catch { return false } })
   const [mapBackground, setMapBackground] = useState(getStoredMapBackground)
   const mapColors = getMapColors(isDark || mapBackground === 'satellite')
@@ -89,7 +94,7 @@ function App() {
   const [toDate, setToDate] = useState(demoEndDate)
   const [fileName, setFileName] = useState('')
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null)
-  const { data: placeAnalysis, statistics, trips, loading: placesLoading, statisticsLoading, tripsLoading, error: placesError, retry: retryPlaces } = usePlaces(dataset, showSuspectPoints, placesRequested, statisticsRequested, tripsRequested, homeRadiusKm)
+  const { data: placeAnalysis, statistics, trips, loading: placesLoading, statisticsLoading, tripsLoading, error: placesError, retry: retryPlaces } = usePlaces(dataset, showSuspectPoints, placesRequested, statisticsRequested, tripsRequested, homeRadiusKm, homeLocations)
   useEffect(() => { try { localStorage.setItem('timeline-explorer-dark', String(isDark)) } catch { /* Storage is optional. */ } }, [isDark])
   useEffect(() => { try { localStorage.setItem(mapBackgroundStorageKey, mapBackground) } catch { /* Storage is optional. */ } }, [mapBackground])
   useEffect(() => { try { localStorage.setItem(homeRadiusStorageKey, String(storedRadiusKm)) } catch { /* The radius also works without storage. */ } }, [storedRadiusKm])
@@ -217,6 +222,19 @@ function App() {
     setSelectedPointId(null)
   }, [])
 
+  function saveHomeLocations(homes: DatedHomeLocation[]) {
+    if (isDemo) setDemoHome(homes)
+    else setStoredHome(homes)
+    const key = isDemo ? demoHomeLocationStorageKey : homeLocationStorageKey
+    try {
+      if (homes.length) localStorage.setItem(key, JSON.stringify(homes))
+      else localStorage.removeItem(key)
+    } catch { /* The selection still works for this session. */ }
+    setTripScope(null)
+    setSelectedPointId(null)
+    setHomeDialogOpen(false)
+  }
+
   const qualityNotice = pointQuality.excluded.length > 0 && (qualityDismissed ? (
     <button className="quality-reopen quiet-button" type="button" onClick={() => setQualityDismissed(false)}>{t.showLocationQuality}</button>
   ) : (
@@ -248,6 +266,9 @@ function App() {
           onLanguageChange={setLanguage} onDistanceUnitsChange={setDistanceUnits}
           onToggleTheme={() => setIsDark(current => !current)} onMerge={() => setFileDialog('merge')} onExport={() => setFileDialog('export')} />
       </header>
+
+      {homeDialogOpen && <HomeLocationDialog language={language} saved={homeLocations} suggested={trips?.homes.at(-1)} overview={dataset.cleanPoints.at(-1)}
+        isDemo={isDemo} onSave={saveHomeLocations} onClose={() => setHomeDialogOpen(false)} />}
 
       {fileDialog && <Suspense fallback={null}>
         {fileDialog === 'merge'
@@ -297,7 +318,7 @@ function App() {
       )}
       {tripsRequested && <div className="trips-workspace" hidden={activeTab !== 'trips'}>
         <Suspense fallback={<div className="places-message" role="status"><span className="places-spinner" />{t.analysing}</div>}>
-          <Trips distanceUnits={distanceUnits} data={trips} loading={tripsLoading} error={placesError ? t[placesError] : undefined} language={language} isDemo={isDemo} homeRadiusKm={homeRadiusKm} onHomeRadiusChange={changeHomeRadius} onRetry={retryPlaces} onOpenTrip={openTrip} />
+          <Trips distanceUnits={distanceUnits} data={trips} loading={tripsLoading} error={placesError ? t[placesError] : undefined} language={language} isDemo={isDemo} homeRadiusKm={homeRadiusKm} hasManualHome={homeLocations.length > 0} onEditHome={() => setHomeDialogOpen(true)} onHomeRadiusChange={changeHomeRadius} onRetry={retryPlaces} onOpenTrip={openTrip} />
         </Suspense>
       </div>}
       {statisticsRequested && <div className="statistics-workspace" hidden={activeTab !== 'statistics'}>

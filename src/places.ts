@@ -139,6 +139,10 @@ function getMatcher(cities: CityReference[], countryCodes: Record<string, string
   return match
 }
 
+export function countryCodeAt(point: TimelinePoint, cities: CityReference[], countryCodes: Record<string, string>, countryFeatures: CountryFeature[]) {
+  return getMatcher(cities, countryCodes, countryFeatures)(point)?.country.countryCode
+}
+
 /** Reference arrays are immutable. Reuse them to retain the spatial indexes;
  * point caches are weak so replacing an imported file releases its observations. */
 export function analysePlaces(points: TimelinePoint[], cities: CityReference[], countryCodes: Record<string, string>, countryFeatures: CountryFeature[], datesByPoint?: ReadonlyMap<TimelinePoint, readonly string[]>): PlaceAnalysis {

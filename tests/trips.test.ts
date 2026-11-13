@@ -43,6 +43,42 @@ test('Friday to Sunday is two nights; selection uses original home anchors and m
   assert.equal(JSON.stringify(points), before)
 })
 
+test('a selected home detects trips without inferred home visits and supplies the home country', () => {
+  const points = weekend().map(item => item.label === 'Home' ? { ...item, label: 'Visited place' } : item)
+  const places = placesFor(points, [{ key: 'NO:hotel', name: 'Hotel', countryCode: 'NO', ids: ['hotel'] }])
+  assert.equal(analyse(points, places).homeStatus, 'missing')
+
+  const homeLocation = { lat: 59.9102, lng: 10.7001 }
+  const result = buildTrips(points, points, places, undefined, { homes: [{ ...homeLocation, from: '', countryCode: 'NO' }] })
+  assert.equal(result.homes[0]?.lat, homeLocation.lat)
+  assert.equal(result.trips[0]?.scope, 'domestic')
+  assert.deepEqual(result.trips[0]?.pointIds, points.map(point => point.id))
+
+  const differentHome = buildTrips(points, points, places, undefined, { homes: [{ lat: 51.5, lng: 0, from: '', countryCode: 'GB' }] })
+  assert.equal(differentHome.trips.length, 0)
+})
+
+test('dated home locations switch at local midnight and preserve automatically detected earlier trips', () => {
+  const earlier = weekend()
+  const makeTrip = (prefix: string, start: string, lat: number, lng: number) =>
+    weekend(start, 60.4, 11.2).map((item, index) => ({
+      ...item, id: `${prefix}-${index}`, label: index === 1 ? 'Hotel' : 'Visited place',
+      ...(index === 1 ? {} : { lat, lng }),
+    }))
+  const spring = makeTrip('spring', '2025-04-02T14:00:00Z', 59.1, 10.2)
+  spring[0]!.timestamp = '2025-03-31T22:00:00.000Z' // Midnight in Oslo on the move date.
+  const summer = makeTrip('summer', '2025-07-04T14:00:00Z', 58.1, 8)
+  const points = sorted([...earlier, ...spring, ...summer])
+  const places = placesFor(points, [{ key: 'hotel', name: 'Hotel', countryCode: 'NO', ids: ['hotel', 'spring-1', 'summer-1'] }])
+  const result = buildTrips(points, points, places, undefined, { homes: [
+    { lat: 59.1, lng: 10.2, from: '2025-04-01', countryCode: 'NO' },
+    { lat: 58.1, lng: 8, from: '2025-07-01', countryCode: 'NO' },
+  ] })
+
+  assert.deepEqual(result.trips.map(trip => trip.pointIds[0]), ['summer-0', 'spring-0', 'home-out'])
+  assert.deepEqual(result.homes.map(home => home.startDate), ['2025-03-06', '2025-04-01', '2025-07-01'])
+})
+
 test('two calendar nights survive DST and a configurable radius controls nearby destinations', () => {
   const points = weekend('2025-03-28T14:00:00Z', 59.918, 10.7)
   assert.equal(analyse(points).trips.length, 0)
