@@ -1,5 +1,18 @@
+import { KM_PER_MILE, type DistanceUnits } from './formatting.ts'
+
 export const DEFAULT_HOME_RADIUS_KM = 25
 export const HOME_RADIUS_OPTIONS = [10, 25, 50] as const
+export const homeRadiusOptionsKm: Record<DistanceUnits, readonly number[]> = {
+  metric: HOME_RADIUS_OPTIONS,
+  imperial: [5, 15, 30].map(miles => miles * KM_PER_MILE),
+}
+
+export function homeRadiusForUnits(radiusKm: number, units: DistanceUnits): number {
+  const otherUnits = units === 'metric' ? 'imperial' : 'metric'
+  const presetIndex = homeRadiusOptionsKm[otherUnits].indexOf(radiusKm)
+  return homeRadiusOptionsKm[units][presetIndex] ?? radiusKm
+}
+
 export const homeRadiusStorageKey = 'timeline-explorer-trip-home-radius-km'
 
 /** Engine callers may use smaller radii for detailed analyses; the UI offers

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { prepareTimeline } from '../src/timelineIndex.ts'
 import { buildTrips } from '../src/trips.ts'
 import { buildRouteSegments } from '../src/routes.ts'
 import type { TimelinePoint } from '../src/timeline.ts'
@@ -114,6 +115,26 @@ test('bounded sparse foreign stays need nearby matching-country evidence and a r
   assert.equal(analyse(far.points, far.places).trips.length, 0)
 })
 
+test('an impossible regional jump into the home area cannot end a trip early', () => {
+  const points = weekend()
+  const homeReturn = points.pop()!
+  points.push(
+    point('on-road-before', '2025-03-09T10:28:00Z', 60.5624, 9.9958),
+    point('false-return', '2025-03-09T10:29:00Z', 59.9336, 10.4384),
+    point('on-road-after', '2025-03-09T10:29:00Z', 60.56, 9.998),
+    point('real-return', '2025-03-09T11:30:00Z', 60.12, 10.7),
+    homeReturn,
+  )
+
+  const dataset = prepareTimeline(points)
+  assert.deepEqual(dataset.excluded.map(({ point }) => point.id), ['false-return'])
+  const trip = analyse(points, placesFor(points), dataset.cleanPoints).trips[0]!
+  assert.equal(trip.endTimestamp, '2025-03-09T11:30:00.000Z')
+  assert.ok(trip.pointIds.includes('on-road-after'))
+  assert.ok(!trip.pointIds.includes('false-return'))
+  assert.equal(trip.mapPointIds?.at(-1), 'home-in')
+})
+
 test('one inside-radius fix ends a trip immediately without requiring a confirmed home stay', () => {
   const points = weekend()
   points[2] = point('home-single', points[2]!.timestamp)
@@ -178,6 +199,33 @@ test('home-area arrival excludes every subsequent local errand from the finished
   assert.equal(result.trips[0]!.pointIds.at(-1), 'home-return')
   points[points.length - 2]!.timestamp = '2025-03-10T12:00:01Z'
   assert.equal(analyse(sorted(points)).trips[0]!.pointIds.at(-1), 'home-return')
+})
+
+test('the map includes both recorded legs inside the radius without changing trip boundaries', () => {
+  const points = weekend()
+  const homeReturn = points.pop()!
+  points.splice(1, 0,
+    point('outbound-near-home', '2025-03-07T14:10:00Z', 59.92, 10.7),
+    point('outbound-edge', '2025-03-07T14:45:00Z', 60.12, 10.7),
+  )
+  points.push(
+    point('inbound-edge', '2025-03-09T11:00:00Z', 60.12, 10.7),
+    point('inbound-near-home', '2025-03-09T11:45:00Z', 59.92, 10.7),
+    homeReturn,
+    point('later-errand', '2025-03-10T12:00:00Z', 59.95, 10.7),
+  )
+
+  const trip = analyse(points).trips[0]!
+  assert.equal(trip.startTimestamp, '2025-03-07T16:00:00.000Z')
+  assert.equal(trip.endTimestamp, '2025-03-09T11:00:00.000Z')
+  assert.equal(trip.nights, 2)
+  assert.deepEqual(trip.pointIds, ['outbound-edge', 'hotel', 'inbound-edge'])
+  assert.deepEqual(trip.mapPointIds, points.slice(0, -1).map(point => point.id))
+  assert.ok(buildRouteSegments(points.slice(0, -1), points).distanceKm > trip.distanceKm)
+
+  homeReturn.timestamp = '2025-03-09T22:00:00.000Z'
+  const withGap = analyse(points).trips[0]!
+  assert.equal(withGap.mapPointIds?.at(-1), 'inbound-edge')
 })
 
 test('map selection excludes drift during the departure home visit while retaining its original anchor', () => {

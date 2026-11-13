@@ -16,7 +16,7 @@ Your file stays in browser memory and is never uploaded to GitHub. Refreshing th
 ## Explore your history
 
 - **Map** shows routes for a day or date range. Dashed lines mark flights.
-- **Trips** groups domestic and international journeys with at least two nights away. The default home radius is 25 km. A recorded return home ends the trip.
+- **Trips** groups domestic and international journeys with at least two nights away. The default home radius is 25 km or 15 mi, depending on your distance units. A recorded return home ends the trip.
 - **Places** ranks countries and cities by recorded days. Click tiles to show movement in the selected area. Places with fewer than 10 points are in a collapsible section at the bottom.
 - **Statistics** shows monthly distance, a calendar coloured by distance, movement by time of day, recognised transport by distance or recorded travel time, and your most frequent routes between cities. **Under your own power** combines walking, running and cycling distance, compared with a lap around the Moon. These are estimates from recognised records; transport coverage is shown below the bars.
 

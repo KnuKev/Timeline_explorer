@@ -3,7 +3,7 @@ import { parseTimeline, type TimelinePoint } from './timeline'
 import { demoTimeline, demoStartDate, demoEndDate } from './demoTimeline'
 import { selectPlacesYear, type PlaceEntry } from './places'
 import type { TimelineTrip } from './trips'
-import { getStoredHomeRadius, homeRadiusStorageKey, normalizeHomeRadius } from './tripSettings'
+import { getStoredHomeRadius, homeRadiusForUnits, homeRadiusStorageKey, normalizeHomeRadius } from './tripSettings'
 import { getStoredLanguage, languageStorageKey, locales, pointLabel, translations, type Language } from './i18n'
 import { buildRouteSegments } from './routes'
 import { prepareTimeline, selectTimelineRange, groupTimelineSelection, adjacentRecordedDay, type TimelineDataset } from './timelineIndex'
@@ -74,7 +74,8 @@ function App() {
   const [statisticsRequested, setStatisticsRequested] = useState(false)
   const [tripsRequested, setTripsRequested] = useState(false)
   const [tripScope, setTripScope] = useState<TimelineTrip | null>(null)
-  const [homeRadiusKm, setHomeRadiusKm] = useState(getStoredHomeRadius)
+  const [storedRadiusKm, setHomeRadiusKm] = useState(getStoredHomeRadius)
+  const homeRadiusKm = homeRadiusForUnits(storedRadiusKm, distanceUnits)
   const [placeScope, setPlaceScope] = useState<PlaceScope | null>(null)
   const [placeViewEnabled, setPlaceViewEnabled] = useState(false)
   const [isDemo, setIsDemo] = useState(true)
@@ -91,7 +92,7 @@ function App() {
   const { data: placeAnalysis, statistics, trips, loading: placesLoading, statisticsLoading, tripsLoading, error: placesError, retry: retryPlaces } = usePlaces(dataset, showSuspectPoints, placesRequested, statisticsRequested, tripsRequested, homeRadiusKm)
   useEffect(() => { try { localStorage.setItem('timeline-explorer-dark', String(isDark)) } catch { /* Storage is optional. */ } }, [isDark])
   useEffect(() => { try { localStorage.setItem(mapBackgroundStorageKey, mapBackground) } catch { /* Storage is optional. */ } }, [mapBackground])
-  useEffect(() => { try { localStorage.setItem(homeRadiusStorageKey, String(homeRadiusKm)) } catch { /* The radius also works without storage. */ } }, [homeRadiusKm])
+  useEffect(() => { try { localStorage.setItem(homeRadiusStorageKey, String(storedRadiusKm)) } catch { /* The radius also works without storage. */ } }, [storedRadiusKm])
 
   const availableDays = useMemo(() => dataset.days.filter(day => showSuspectPoints || day.cleanCount > 0).map(day => day.day), [dataset, showSuspectPoints])
   const visiblePoints = useMemo(() => selectTimelineRange(dataset, dateMode === 'day' ? selectedDate : fromDate, dateMode === 'day' ? selectedDate : toDate, showSuspectPoints), [dataset, dateMode, selectedDate, fromDate, toDate, showSuspectPoints])
@@ -104,7 +105,7 @@ function App() {
   }, [dataset, placeAnalysis, placeYear, showSuspectPoints])
 
   const mapPoints = useMemo(() => {
-    if (tripScope) return tripScope.pointIds.map(id => pointsById.get(id)).filter((point): point is TimelinePoint => Boolean(point))
+    if (tripScope) return (tripScope.mapPointIds ?? tripScope.pointIds).map(id => pointsById.get(id)).filter((point): point is TimelinePoint => Boolean(point))
     if (!placeScope || !placeViewEnabled) return visiblePoints
     const scopedPlaces = placeScope.kind === 'country' ? selectedPlaces?.countries : selectedPlaces?.cities
     const ids = scopedPlaces?.find(place => place.key === placeScope.key)?.pointIds ?? []

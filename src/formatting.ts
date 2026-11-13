@@ -72,6 +72,8 @@ export function formatPointInterval(point: TimelinePoint, locale: string, detail
   return Number.isFinite(end) && end > start ? formatter.formatRange(start, end) : formatter.format(start)
 }
 
+export const KM_PER_MILE = 1.609344
+
 export type DistanceUnits = 'metric' | 'imperial'
 export const distanceUnitsStorageKey = 'timeline-explorer-distance-units'
 
@@ -85,7 +87,7 @@ export function distanceUnit(units: DistanceUnits): 'km' | 'mi' {
 }
 
 export function distanceInUnits(kilometers: number, units: DistanceUnits): number {
-  return units === 'imperial' ? kilometers / 1.609344 : kilometers
+  return units === 'imperial' ? kilometers / KM_PER_MILE : kilometers
 }
 
 function distanceNumber(value: number, unit: string, locale: string, maximumFractionDigits: number): string {

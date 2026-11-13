@@ -13,6 +13,8 @@ export type PointQualityResult = {
 }
 
 const MIN_JUMP_KM = 100
+const MIN_SHORT_JUMP_KM = 10
+const MAX_SHORT_JUMP_WINDOW_MS = 2 * 60_000
 // Deliberately above normal commercial aircraft speeds. Distance alone is not a fault.
 const MAX_PLAUSIBLE_SPEED_KMH = 1_500
 const MAX_EXCURSION_POINTS = 3
@@ -51,7 +53,7 @@ export function analysePointQuality(points: TimelinePoint[]): PointQualityResult
     const firstTime = timestamps[index]!
     if (!Number.isFinite(previousTime) || !Number.isFinite(firstTime) || firstTime < previousTime) continue
     const outbound = distanceBetween(previous, first)
-    if (outbound < MIN_JUMP_KM || speedKmh(outbound, firstTime - previousTime) <= MAX_PLAUSIBLE_SPEED_KMH) continue
+    if (outbound < MIN_SHORT_JUMP_KM || speedKmh(outbound, firstTime - previousTime) <= MAX_PLAUSIBLE_SPEED_KMH) continue
 
     let clusterEndTime = firstTime
     for (let count = 1; count <= MAX_EXCURSION_POINTS && index + count < points.length; count++) {
@@ -70,10 +72,15 @@ export function analysePointQuality(points: TimelinePoint[]): PointQualityResult
       const anchorWindow = nextTime - previousTime
       if (!Number.isFinite(nextTime) || nextTime < lastTime || anchorWindow < 0 || anchorWindow > MAX_ANCHOR_WINDOW_MS || clusterEndTime > nextTime) continue
       const inbound = distanceBetween(last, next)
-      if (inbound < MIN_JUMP_KM || speedKmh(inbound, nextTime - lastTime) <= MAX_PLAUSIBLE_SPEED_KMH) continue
+      if (inbound < MIN_SHORT_JUMP_KM || speedKmh(inbound, nextTime - lastTime) <= MAX_PLAUSIBLE_SPEED_KMH) continue
 
       const direct = distanceBetween(previous, next)
-      if (direct > Math.max(100, Math.min(outbound, inbound) * 0.1)) continue
+      const shortestLeg = Math.min(outbound, inbound)
+      const shortJump = shortestLeg < MIN_JUMP_KM
+      // Regional jumps need much closer anchors in both time and space.
+      if (shortJump && anchorWindow > MAX_SHORT_JUMP_WINDOW_MS) continue
+      const maxDirectDistance = Math.max(shortJump ? 1 : 100, shortestLeg * 0.1)
+      if (direct > maxDirectDistance) continue
       if (direct > 1 && speedKmh(direct, anchorWindow) > MAX_PLAUSIBLE_SPEED_KMH) continue
 
       for (let suspect = index; suspect <= lastIndex; suspect++) {

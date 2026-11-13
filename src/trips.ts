@@ -7,7 +7,7 @@ import { normalizeHomeRadius } from './tripSettings.ts'
 
 export type TripDestination = { key: string; name: string; countryCode?: string; kind: 'city' | 'country' | 'place' | 'itinerary'; locality?: string; region?: string; lat?: number; lng?: number }
 export type TripLocalityResolver = (point: Pick<TimelinePoint, 'lat' | 'lng'>, countryCode?: string) => { name: string; countryCode?: string; region?: string; distanceKm?: number } | undefined
-export type TimelineTrip = { id: string; destination: TripDestination; category: 'destination' | 'roadtrip' | 'multi-stop'; scope: 'domestic' | 'international' | 'unknown'; hasFlight: boolean; homeKey?: string; homeCountryCode?: string; countryCodes: string[]; startTimestamp: string; endTimestamp: string; startDate: string; endDate: string; nights: number; distanceKm: number; places: TripDestination[]; pointIds: string[] }
+export type TimelineTrip = { id: string; destination: TripDestination; category: 'destination' | 'roadtrip' | 'multi-stop'; scope: 'domestic' | 'international' | 'unknown'; hasFlight: boolean; homeKey?: string; homeCountryCode?: string; countryCodes: string[]; startTimestamp: string; endTimestamp: string; startDate: string; endDate: string; nights: number; distanceKm: number; places: TripDestination[]; pointIds: string[]; mapPointIds?: string[] }
 export type TripDestinationGroup = { destination: TripDestination; trips: TimelineTrip[]; totalNights: number; totalDistanceKm: number; lastStartDate: string }
 export type TripHome = { key: string; name?: string; countryCode?: string; startDate: string; lat: number; lng: number; recordedNights: number; explicit: boolean }
 export type TripOptions = { homeRadiusKm?: number }
@@ -18,6 +18,7 @@ const DAY = 24 * HOUR
 const HOME_RADIUS_KM = 0.3
 const STAY_RADIUS_KM = 1
 const MAX_BLIND_GAP = 36 * HOUR
+const MAX_HOME_LEG_MS = 6 * HOUR
 const MAX_VISIT_EVIDENCE = 90 * DAY
 const CELL = HOME_RADIUS_KM / 6371
 type Night = { date: string; day: number; at: number; instant: number }
@@ -387,6 +388,23 @@ export function buildTrips(points: TimelinePoint[], allPoints: TimelinePoint[], 
   let lastHome: HomeAnchor | undefined
   let candidate: CandidateTrip | undefined
 
+  // Extend the display only when the same inside-area leg has a recorded
+  // observation near this home's center. Stop at other trips or home profiles.
+  const findMapHomeAnchor = (boundary: HomeAnchor, direction: -1 | 1, home: HomeProfile) => {
+    const nextHomeAt = profiles[profileIndex + 1]?.at ?? Infinity
+    for (let index = boundary.index; index >= 0 && index < points.length; index += direction) {
+      const point = points[index]!
+      const time = Date.parse(point.timestamp)
+      if (!Number.isFinite(time) || time < home.at || time >= nextHomeAt) break
+      const elapsed = direction === -1 ? boundary.time - visitEvidenceEnd(point, time) : time - boundary.time
+      if (elapsed > MAX_HOME_LEG_MS) break
+      const distance = distanceKm([point, home.cluster.point])
+      if (distance > homeRadiusKm) break
+      if (distance <= HOME_RADIUS_KM) return index
+    }
+    return boundary.index
+  }
+
   const complete = (trip: CandidateTrip, arrival: HomeAnchor) => {
     if (trip.invalid || arrival.time <= trip.departure) return
     const startDate = calendar.local(trip.departure, trip.home.zone).date
@@ -517,6 +535,14 @@ export function buildTrips(points: TimelinePoint[], allPoints: TimelinePoint[], 
       // Total work is linear in trip observations, not one full import per trip.
       distanceKm: route.distanceKm,
       places: [...ordered].sort((a, b) => a.first - b.first).map(score => score.destination), pointIds: selected.map(point => point.id) }
+    const mapStart = trip.start.time >= trip.start.end ? findMapHomeAnchor(trip.start, -1, trip.home) : trip.start.index
+    const mapEnd = findMapHomeAnchor(arrival, 1, trip.home)
+    if (mapStart < trip.start.index || mapEnd > arrival.index) {
+      const first = points[mapStart]!
+      const firstEnd = visitEvidenceEnd(first, Date.parse(first.timestamp))
+      const outbound = points.slice(mapStart, trip.start.index).filter((point, index) => index === 0 || Date.parse(point.timestamp) >= firstEnd)
+      result.mapPointIds = [...outbound, ...selected, ...points.slice(arrival.index + 1, mapEnd + 1)].map(point => point.id)
+    }
     trips.push(result)
     if (multipleStops) itineraryStops.set(result, stops.map(score => score.destination))
   }
