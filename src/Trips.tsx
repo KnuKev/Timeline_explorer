@@ -1,4 +1,4 @@
-import { memo, useId, useMemo, useState } from 'react'
+import { memo, useId, useMemo, useState, type ReactNode } from 'react'
 import type { TripDestination, TimelineTrip, TripsAnalysis } from './trips'
 import { locales, type Language } from './i18n'
 import { formatLargeDistance, formatPlaceDate, type DistanceUnits } from './formatting'
@@ -9,6 +9,7 @@ import Icon from './Icon'
 import './Trips.css'
 
 type Props = {
+  settings?: ReactNode
   data: TripsAnalysis | null
   loading: boolean
   error?: string
@@ -138,7 +139,7 @@ function TripHistory({ trips, groups, scope, locale, t, regionNames, onOpenTrip 
   </>
 }
 
-export default function Trips({ data, loading, error, language, isDemo = false, distanceUnits = 'metric', homeRadiusKm, hasManualHome, onEditHome, onHomeRadiusChange, onRetry, onOpenTrip }: Props) {
+export default function Trips({ settings, data, loading, error, language, isDemo = false, distanceUnits = 'metric', homeRadiusKm, hasManualHome, onEditHome, onHomeRadiusChange, onRetry, onOpenTrip }: Props) {
   const [selectedYear, setYear] = useState('all')
   const radiusHintId = useId()
   const [selectedScope, setScope] = useState<TripScope | null>(null)
@@ -166,6 +167,7 @@ export default function Trips({ data, loading, error, language, isDemo = false, 
     <header className="trips-heading report-heading">
       <h1>{t.title}{isDemo && <span className="trips-sample">{t.sample}</span>}</h1>
       {years.length > 0 && <label className="report-period"><span>{t.year}</span><select value={year} onChange={event => setYear(event.target.value)}><option value="all">{t.all}</option>{years.map(candidate => <option key={candidate} value={candidate}>{Number(candidate)}</option>)}</select></label>}
+      {settings}
     </header>
     <p className="trips-intro">{t.intro}</p>
     <div className="trips-settings">

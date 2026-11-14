@@ -190,11 +190,11 @@
   .trips-scope-switch { display: none; }
   .trips-select.trips-scope-select { display: block; min-width: 0; }
   .trips-scope-select select { width: 100%; max-width: 175px; min-width: 0; }
-  .trips-home-button { width: var(--touch-target); justify-content: center; padding: 0; }
+  .trips-home-button { width: var(--report-control-height); height: var(--report-control-height); justify-content: center; padding: 0; }
   .trips-home-button span { display: none; }
   .trips-intro, .trips-radius-hint, .trips-hero > small, .trips-method,
   .trips-favourites .trips-section-heading p, .trips-state > p:not([data-error-detail]) { display: none; }
-  .trips-select.compact select { height: 46px; font-size: 13px; }
+  .trips-select.compact select { height: var(--report-control-height); font-size: 13px; }
   .trips-home-button, .trips-scope-switch button, .trips-open-map {
     min-height: var(--touch-target);
   }

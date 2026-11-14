@@ -18,9 +18,6 @@ import HomeLocationDialog from './HomeLocationDialog'
 import { distanceUnitsStorageKey, formatCalendarDate, formatPlaceDate, formatPointInterval, formatDistance, formatLargeDistance, getStoredDistanceUnits } from './formatting'
 import './App.css'
 
-type SheetSize = 'compact' | 'half' | 'expanded'
-const sheetSizes: SheetSize[] = ['compact', 'half', 'expanded']
-
 type DateMode = 'day' | 'period'
 type ActiveTab = 'map' | 'trips' | 'places' | 'statistics'
 type PlaceScope = { kind: 'country' | 'city'; name: string; key: string; countryName?: string; countryCode?: string }
@@ -52,187 +49,14 @@ function App() {
   const pointsById = useMemo(() => new Map(importedPoints.map(point => [point.id, point])), [importedPoints])
   const suspectPointIds = useMemo(() => new Set(dataset.excluded.map(entry => entry.point.id)), [dataset])
   const [activeTab, setActiveTab] = useState<ActiveTab>('map')
-  const [sheetSize, setSheetSize] = useState<SheetSize>('half')
-  const shell = useRef<HTMLElement>(null)
-  const sheet = useRef<HTMLElement>(null)
+  const [sheetExpanded, setSheetExpanded] = useState(false)
   const sheetContent = useRef<HTMLDivElement>(null)
-  const lastSheetWheel = useRef<{ time: number; direction: number } | null>(null)
-  const ignoreSheetClick = useRef(false)
 
   useEffect(() => {
-    const panel = sheet.current
-    const content = sheetContent.current
-    const element = shell.current
-    if (!panel || !content || !element) return
-    const mobile = window.matchMedia('(max-width: 680px)')
-    let gesture: {
-      id: number
-      x: number
-      y: number
-      fromHandle: boolean
-      height: number
-      stops: [number, number, number]
-      samples: { y: number; time: number }[]
-      dragging: boolean
-    } | undefined
-
-    function begin(id: number, x: number, y: number, time: number, fromHandle: boolean) {
-      if (!panel || !element) return
-      const style = getComputedStyle(panel)
-      const min = parseFloat(style.minHeight)
-      const max = Math.max(min, parseFloat(style.maxHeight))
-      const middle = Math.max(min, Math.min(max, element.clientHeight * .48))
-      gesture = { id, x, y, fromHandle, height: panel.getBoundingClientRect().height,
-        stops: [min, middle, max], samples: [{ y, time }], dragging: false }
+    if (!sheetExpanded && window.matchMedia('(max-width: 680px)').matches && sheetContent.current) {
+      sheetContent.current.scrollTop = 0
     }
-
-    function move(id: number, x: number, y: number, time: number, event: PointerEvent | TouchEvent) {
-      const drag = gesture
-      if (!drag || drag.id !== id || !element || !content) return
-      const distance = drag.y - y
-      if (!drag.dragging) {
-        if (Math.max(Math.abs(distance), Math.abs(x - drag.x)) < 5) return
-        if (Math.abs(x - drag.x) > Math.abs(distance)
-          || (!drag.fromHandle && sheetSize === 'expanded' && (distance > 0 || content.scrollTop > 1))) {
-          gesture = undefined
-          return
-        }
-        if (event instanceof PointerEvent) panel?.setPointerCapture(id)
-        drag.dragging = true
-        ignoreSheetClick.current = true
-        element.dataset.sheetDragging = 'true'
-      }
-      if (event.cancelable) event.preventDefault()
-      drag.samples = drag.samples.filter(sample => time - sample.time <= 100)
-      drag.samples.push({ y, time })
-      const height = drag.height + distance
-      element.style.setProperty('--sheet-drag-height', `${height}px`)
-      if (!drag.fromHandle) {
-        element.toggleAttribute('data-sheet-at-top', height >= drag.stops[2])
-        content.scrollTop = Math.max(0, height - drag.stops[2])
-      }
-    }
-
-    function finish(id: number, y: number, time: number, cancelled: boolean) {
-      const drag = gesture
-      if (!drag || drag.id !== id || !element) return
-      gesture = undefined
-      if (!drag.dragging) return
-      if (!cancelled) {
-        const distance = drag.y - y
-        const height = drag.height + distance
-        const [compact, middle, expanded] = drag.stops
-        const sample = drag.samples.find(entry => time - entry.time <= 100)
-        const velocity = sample ? (sample.y - y) / Math.max(1, time - sample.time) : 0
-        const current = sheetSizes.indexOf(sheetSize)
-        const flick = Math.abs(velocity) >= .45 && Math.abs(distance) >= 14
-        const next = height >= expanded ? 2 : height <= compact ? 0
-          : flick ? Math.max(0, Math.min(2, current + Math.sign(velocity)))
-            : height < middle - (middle - compact) * .66 ? 0
-              : height > middle + (expanded - middle) * .66 ? 2 : 1
-        setSheetSize(sheetSizes[next]!)
-      }
-      delete element.dataset.sheetDragging
-      element.style.removeProperty('--sheet-drag-height')
-      requestAnimationFrame(() => {
-        if (!element.hasAttribute('data-sheet-dragging')) element.removeAttribute('data-sheet-at-top')
-        panel?.dispatchEvent(new Event('sheetsettle'))
-      })
-    }
-
-    function onPointerDown(event: PointerEvent) {
-      if (!mobile.matches || !event.isPrimary || event.button !== 0 || !(event.target instanceof Element)) return
-      ignoreSheetClick.current = false
-      const handle = event.target.closest('.sheet-handle')
-      if (!handle && (event.pointerType === 'touch' || sheetSize === 'expanded' || event.target.closest('input, select, textarea'))) return
-      begin(event.pointerId, event.clientX, event.clientY, event.timeStamp, Boolean(handle))
-    }
-
-    function onPointerMove(event: PointerEvent) {
-      if (event.pointerType === 'touch' && !gesture?.fromHandle) return
-      move(event.pointerId, event.clientX, event.clientY, event.timeStamp, event)
-    }
-
-    function onPointerEnd(event: PointerEvent) {
-      if (event.pointerType === 'touch' && !gesture?.fromHandle) return
-      finish(event.pointerId, event.clientY, event.timeStamp, event.type !== 'pointerup')
-    }
-
-    function onTouchStart(event: TouchEvent) {
-      ignoreSheetClick.current = false
-      if (!mobile.matches || event.touches.length !== 1 || !(event.target instanceof Element)
-        || event.target.closest('input, select, textarea')) return
-      const touch = event.touches[0]!
-      begin(touch.identifier, touch.clientX, touch.clientY, event.timeStamp, false)
-    }
-
-    function onTouchMove(event: TouchEvent) {
-      if (!gesture || gesture.fromHandle) return
-      const touch = Array.from(event.changedTouches).find(entry => entry.identifier === gesture?.id)
-      if (!touch) return
-      if (event.touches.length !== 1 || !event.cancelable) {
-        finish(touch.identifier, touch.clientY, event.timeStamp, true)
-        return
-      }
-      move(touch.identifier, touch.clientX, touch.clientY, event.timeStamp, event)
-    }
-
-    function onTouchEnd(event: TouchEvent) {
-      if (!gesture || gesture.fromHandle) return
-      const touch = Array.from(event.changedTouches).find(entry => entry.identifier === gesture?.id)
-      if (touch) finish(touch.identifier, touch.clientY, event.timeStamp, event.type === 'touchcancel')
-    }
-
-    panel.addEventListener('pointerdown', onPointerDown)
-    panel.addEventListener('pointermove', onPointerMove)
-    panel.addEventListener('pointerup', onPointerEnd)
-    panel.addEventListener('pointercancel', onPointerEnd)
-    panel.addEventListener('lostpointercapture', onPointerEnd)
-    content.addEventListener('touchstart', onTouchStart, { passive: true })
-    content.addEventListener('touchmove', onTouchMove, { passive: false })
-    content.addEventListener('touchend', onTouchEnd)
-    content.addEventListener('touchcancel', onTouchEnd)
-    return () => {
-      panel.removeEventListener('pointerdown', onPointerDown)
-      panel.removeEventListener('pointermove', onPointerMove)
-      panel.removeEventListener('pointerup', onPointerEnd)
-      panel.removeEventListener('pointercancel', onPointerEnd)
-      panel.removeEventListener('lostpointercapture', onPointerEnd)
-      content.removeEventListener('touchstart', onTouchStart)
-      content.removeEventListener('touchmove', onTouchMove)
-      content.removeEventListener('touchend', onTouchEnd)
-      content.removeEventListener('touchcancel', onTouchEnd)
-    }
-  }, [sheetSize])
-
-  useEffect(() => {
-    if (sheetSize !== 'expanded' && sheetContent.current) sheetContent.current.scrollTop = 0
-  }, [sheetSize])
-
-  useEffect(() => {
-    const panel = sheet.current
-    if (!panel) return
-    const onWheel = (event: WheelEvent) => {
-      if (!window.matchMedia('(max-width: 680px)').matches || event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
-      const direction = Math.sign(event.deltaY)
-      const previous = lastSheetWheel.current
-      const continued = previous?.direction === direction && event.timeStamp - previous.time < 180
-      const reachedTop = sheetSize === 'expanded' && panel.getBoundingClientRect().height >= parseFloat(getComputedStyle(panel).maxHeight) - 1
-      if (reachedTop && direction > 0) return
-      if (continued) {
-        event.preventDefault()
-        lastSheetWheel.current = { time: event.timeStamp, direction }
-        return
-      }
-      if (sheetSize === 'expanded' && (direction > 0 || (sheetContent.current?.scrollTop ?? 0) > 0)) return
-      event.preventDefault()
-      lastSheetWheel.current = { time: event.timeStamp, direction }
-      const next = Math.max(0, Math.min(2, sheetSizes.indexOf(sheetSize) + direction))
-      setSheetSize(sheetSizes[next]!)
-    }
-    panel.addEventListener('wheel', onWheel, { passive: false })
-    return () => panel.removeEventListener('wheel', onWheel)
-  }, [sheetSize])
+  }, [sheetExpanded])
 
   const mainNav = useRef<HTMLElement>(null)
   useLayoutEffect(() => {
@@ -320,7 +144,7 @@ function App() {
       }
       setPlaceViewEnabled(true)
       setTripScope(null)
-      setSheetSize('compact')
+      setSheetExpanded(false)
       setActiveTab('map')
       setSelectedPointId(null)
     }}>
@@ -389,7 +213,7 @@ function App() {
     setPlaceViewEnabled(false)
     setTripScope(null)
     setSelectedPointId(null)
-    setSheetSize('compact')
+    setSheetExpanded(false)
     setActiveTab('map')
   }, [])
   const openTrip = useCallback((trip: TimelineTrip) => {
@@ -401,7 +225,7 @@ function App() {
     setSelectedDate(trip.startDate)
     setDateMode('period')
     setSelectedPointId(null)
-    setSheetSize('compact')
+    setSheetExpanded(false)
     setActiveTab('map')
   }, [])
   const changeHomeRadius = useCallback((radius: number) => {
@@ -439,20 +263,29 @@ function App() {
     </section>
   ))
 
+  const settingsMenu = <SettingsMenu language={language} distanceUnits={distanceUnits} isDark={isDark}
+          mapBackground={mapBackground} onMapBackgroundChange={setMapBackground}
+          onLanguageChange={setLanguage} onDistanceUnitsChange={setDistanceUnits}
+          onToggleTheme={() => setIsDark(current => !current)} onMerge={() => setFileDialog('merge')} onExport={() => setFileDialog('export')} />
+  const reportSettings = <div className="report-settings">{settingsMenu}</div>
+
   return (
-    <main ref={shell} data-sheet={sheetSize} className={'app-shell' + (isDark ? ' dark' : '')} data-view={activeTab}>
+    <main data-sheet={sheetExpanded ? 'expanded' : 'hidden'} className={'app-shell' + (isDark ? ' dark' : '')} data-view={activeTab}>
       <header className="floating-toolbar">
         <nav ref={mainNav} className="main-nav" aria-label={t.navigation}>
-          <button className={'nav-item' + (activeTab === 'map' ? ' is-current' : '')} aria-current={activeTab === 'map' ? 'page' : undefined} type="button" onClick={() => setActiveTab('map')}><Icon name="map" /><span>{t.map}</span></button>
+          <button className={'nav-item' + (activeTab === 'map' ? ' is-current' : '')} aria-current={activeTab === 'map' ? 'page' : undefined} aria-controls="map-sheet-content" type="button" onClick={() => {
+            if (activeTab === 'map' && window.matchMedia('(max-width: 680px)').matches) {
+              setSheetExpanded(expanded => !expanded)
+            }
+            setActiveTab('map')
+          }}><Icon name="map" /><span className="map-tab-label">{t.map}</span>
+            <span className="map-tab-action">{sheetExpanded ? t.showMap : t.showMapDetails}</span></button>
           <button className={'nav-item' + (activeTab === 'trips' ? ' is-current' : '')} aria-current={activeTab === 'trips' ? 'page' : undefined} type="button" onClick={() => { setPlacesRequested(true); setTripsRequested(true); setActiveTab('trips') }}><Icon name="route" /><span>{t.trips}</span></button>
           <button className={'nav-item' + (activeTab === 'places' ? ' is-current' : '')} aria-current={activeTab === 'places' ? 'page' : undefined} type="button" onClick={() => { setPlacesRequested(true); setActiveTab('places') }}><Icon name="globe" /><span>{t.places}</span></button>
           <button className={'nav-item' + (activeTab === 'statistics' ? ' is-current' : '')} aria-current={activeTab === 'statistics' ? 'page' : undefined} type="button" onClick={() => { setPlacesRequested(true); setStatisticsRequested(true); setActiveTab('statistics') }}><Icon name="chart" /><span>{t.statistics}</span></button>
         </nav>
 
-        <SettingsMenu language={language} distanceUnits={distanceUnits} isDark={isDark}
-          mapBackground={mapBackground} onMapBackgroundChange={setMapBackground}
-          onLanguageChange={setLanguage} onDistanceUnitsChange={setDistanceUnits}
-          onToggleTheme={() => setIsDark(current => !current)} onMerge={() => setFileDialog('merge')} onExport={() => setFileDialog('export')} />
+        {settingsMenu}
       </header>
 
       {homeDialogOpen && <HomeLocationDialog language={language} saved={homeLocations} suggested={trips?.homes.at(-1)} overview={dataset.cleanPoints.at(-1)}
@@ -483,6 +316,7 @@ function App() {
                   {placeYears.map(year => <option key={year} value={year}>{Number(year)}</option>)}
                 </select>
               </label>
+              {reportSettings}
             </div>
             <p>{t.placesIntro}</p>
           </header>
@@ -498,7 +332,7 @@ function App() {
           </div>
           {qualityNotice}
           {placesLoading && <div className="places-message"><span className="places-spinner" /> {t.analysing}</div>}{placesError && <div className="places-message places-error" role="alert">{t[placesError]}<button type="button" className="primary-button" onClick={retryPlaces}>{t.retry}</button></div>}
-          {!placesLoading && !placesError && places.length === 0 && <div className="places-empty"><Icon name="globe" /><strong>{placeYear === 'all' ? t.noPlaces : t.noPlacesForYear}</strong>{placeYear === 'all' && <><p>{t.importForPlaces}</p><button type="button" className="primary-button" onClick={() => setActiveTab('map')}>{t.goToMap}</button></>}</div>}
+          {!placesLoading && !placesError && places.length === 0 && <div className="places-empty"><Icon name="globe" /><strong>{placeYear === 'all' ? t.noPlaces : t.noPlacesForYear}</strong>{placeYear === 'all' && <><p>{t.importForPlaces}</p><button type="button" className="primary-button" onClick={() => { setSheetExpanded(true); setActiveTab('map') }}>{t.goToMap}</button></>}</div>}
           {!placesLoading && !placesError && mainPlaces.length > 0 && <div className="places-grid">{mainPlaces.map(renderPlaceCard)}</div>}
           {!placesLoading && !placesError && fewerPlaces.length > 0 && <details key={placeMode} className="fewer-places"><summary><span>{placeMode === 'countries' ? t.fewerCountries : t.fewerPlaces}</span><span className="count-badge">{fewerPlaces.length.toLocaleString(locale)}</span></summary><p>{t.fewerPlacesHint}</p><div className="places-grid">{fewerPlaces.map((place, index) => renderPlaceCard(place, mainPlaces.length + index))}</div></details>}
           <footer className="places-attribution"><span className="mobile-hide-copy">{t.citySuggestions} </span><a href="https://www.geonames.org/" target="_blank" rel="noreferrer">GeoNames</a> (CC BY 4.0)<span className="mobile-hide-copy"> · {t.geodataDetails.replace('{distance}', formatLargeDistance(30, locale, distanceUnits))}</span></footer>
@@ -506,34 +340,16 @@ function App() {
       )}
       {tripsRequested && <div className="trips-workspace" hidden={activeTab !== 'trips'}>
         <Suspense fallback={<div className="places-message" role="status"><span className="places-spinner" />{t.analysing}</div>}>
-          <Trips distanceUnits={distanceUnits} data={trips} loading={tripsLoading} error={placesError ? t[placesError] : undefined} language={language} isDemo={isDemo} homeRadiusKm={homeRadiusKm} hasManualHome={homeLocations.length > 0} onEditHome={() => setHomeDialogOpen(true)} onHomeRadiusChange={changeHomeRadius} onRetry={retryPlaces} onOpenTrip={openTrip} />
+          <Trips settings={reportSettings} distanceUnits={distanceUnits} data={trips} loading={tripsLoading} error={placesError ? t[placesError] : undefined} language={language} isDemo={isDemo} homeRadiusKm={homeRadiusKm} hasManualHome={homeLocations.length > 0} onEditHome={() => setHomeDialogOpen(true)} onHomeRadiusChange={changeHomeRadius} onRetry={retryPlaces} onOpenTrip={openTrip} />
         </Suspense>
       </div>}
       {statisticsRequested && <div className="statistics-workspace" hidden={activeTab !== 'statistics'}>
         <Suspense fallback={<div className="places-message" role="status"><span className="places-spinner" />{t.analysing}</div>}>
-          <Statistics distanceUnits={distanceUnits} data={statistics} loading={statisticsLoading} error={placesError ? t[placesError] : undefined} language={language} isDemo={isDemo} onRetry={retryPlaces} onOpenRange={openStatisticsRange} />
+          <Statistics settings={reportSettings} distanceUnits={distanceUnits} data={statistics} loading={statisticsLoading} error={placesError ? t[placesError] : undefined} language={language} isDemo={isDemo} onRetry={retryPlaces} onOpenRange={openStatisticsRange} />
         </Suspense>
       </div>}
       <div className="workspace" hidden={activeTab !== 'map'}>
-        <aside ref={sheet} className="sidebar"
-          onClickCapture={event => {
-            if (event.detail && ignoreSheetClick.current) {
-              event.preventDefault()
-              event.stopPropagation()
-            }
-          }}>
-          <button type="button" className="sheet-handle" aria-expanded={sheetSize !== 'compact'} aria-controls="map-sheet-content"
-            aria-label={sheetSize === 'compact' ? t.expandMapPanel : t.collapseMapPanel}
-            onClick={() => setSheetSize(size => size === 'compact' ? 'half' : 'compact')}
-            onKeyDown={event => {
-              if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
-              event.preventDefault()
-              const step = event.key === 'ArrowUp' ? 1 : -1
-              setSheetSize(size => sheetSizes[Math.max(0, Math.min(2, sheetSizes.indexOf(size) + step))]!)
-            }}>
-            <span className="sheet-grip" />
-            {sheetSize === 'compact' && <span className="sheet-peek"><strong>{dateMode === 'day' ? formatPlaceDate(selectedDate, locale) : `${formatPlaceDate(fromDate, locale)} – ${formatPlaceDate(toDate, locale)}`}</strong><span>{distanceLabel}</span></span>}
-          </button>
+        <aside className="sidebar">
           <div ref={sheetContent} className="sheet-content" id="map-sheet-content">
             <div className="sheet-import">
               <div className="sidebar-heading"><h1>{t.myTimeline}</h1><span className="sidebar-status"><span />{isDemo ? t.exampleData : t.localFile}</span></div>

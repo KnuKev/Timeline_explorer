@@ -62,11 +62,12 @@ function mapPadding(map: L.Map): { paddingTopLeft: L.PointExpression; paddingBot
   const container = map.getContainer()
   const mapRect = container.getBoundingClientRect()
   const sidebar = container.closest('.workspace')?.querySelector('.sidebar')?.getBoundingClientRect()
-  if (!sidebar || sidebar.width === 0 || sidebar.height === 0) return { paddingTopLeft: [30, 70], paddingBottomRight: [50, 70] }
   if (mapRect.width <= 680) {
-    const visibleHeight = Math.max(1, sidebar.top - mapRect.top)
+    const nav = container.closest('.app-shell')?.querySelector('.main-nav')?.getBoundingClientRect()
+    const visibleHeight = Math.max(1, Math.min(sidebar?.top ?? mapRect.bottom, nav?.top ?? mapRect.bottom) - mapRect.top)
     return { paddingTopLeft: [20, Math.min(24, visibleHeight * .15)], paddingBottomRight: [56, mapRect.height - visibleHeight + Math.min(28, visibleHeight * .15)] }
   }
+  if (!sidebar || sidebar.width === 0 || sidebar.height === 0) return { paddingTopLeft: [30, 70], paddingBottomRight: [50, 70] }
   return { paddingTopLeft: [Math.min(sidebar.right - mapRect.left + 24, mapRect.width * 0.55), 70], paddingBottomRight: [50, 70] }
 }
 
@@ -264,26 +265,20 @@ function ViewportAndControls({ points, selectedPoint, language, active }: { poin
     synchronize()
   }, [synchronize])
   useEffect(() => {
+    map.attributionControl.setPrefix(false)
     if (controls.current) {
       L.DomEvent.disableClickPropagation(controls.current)
       L.DomEvent.disableScrollPropagation(controls.current)
     }
-  }, [])
+  }, [map])
   useEffect(() => {
     const observer = new ResizeObserver(() => synchronizeRef.current())
     const container = map.getContainer()
     observer.observe(container)
     const sidebar = container.closest('.workspace')?.querySelector('.sidebar')
-    const syncPanel = () => {
-      if (!container.closest('[data-sheet-dragging]')) synchronizeRef.current()
-    }
-    const sidebarObserver = new ResizeObserver(syncPanel)
-    if (sidebar) sidebarObserver.observe(sidebar)
-    sidebar?.addEventListener('sheetsettle', syncPanel)
+    if (sidebar) observer.observe(sidebar)
     return () => {
       observer.disconnect()
-      sidebarObserver.disconnect()
-      sidebar?.removeEventListener('sheetsettle', syncPanel)
       synchronizeRef.current = () => {}
     }
   }, [map])

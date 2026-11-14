@@ -8,6 +8,7 @@ import MoonIllustration from './MoonIllustration'
 import './Statistics.css'
 
 type Props = {
+  settings?: ReactNode
   data: StatisticsAnalysis | null
   loading: boolean
   error?: string
@@ -188,7 +189,7 @@ const MovementClock = memo(function MovementClock({ period, language, t }: Perio
         <text x="150" y="180" textAnchor="middle" className="statistics-clock-total">{t.localTime}</text>
       </svg>
       <div className="statistics-clock-summary"><strong>{minutesLabel(total, locale, t)}</strong><span>{t.movement}</span></div>
-      <details className="statistics-hour-details"><summary>{t.hourlyDetails}</summary><div>{hours.map((minutes, hour) => <span key={hour}><strong>{range(hour)}</strong>{minutesLabel(minutes, locale, t)}</span>)}</div><p className="statistics-note statistics-clock-mobile-hint">{t.clockHint}</p></details>
+      <details className="statistics-hour-details"><summary>{t.hourlyDetails}</summary><div>{hours.map((minutes, hour) => <span key={hour}><strong>{range(hour)}</strong>{minutesLabel(minutes, locale, t)}</span>)}</div></details>
     </> : <div className="statistics-empty small"><Icon name="chart" /><p>{t.clockEmpty}</p></div>}
     <p className="statistics-note">{t.clockHint}</p>
   </article>
@@ -306,7 +307,7 @@ function NewPlaces({ period, language, t, onOpenRange }: PeriodProps & { onOpenR
   </article>
 }
 
-function StatisticsContent({ data, language, isDemo, distanceUnits = 'metric', onOpenRange }: Omit<Props, 'data' | 'loading' | 'error' | 'onRetry'> & { data: StatisticsAnalysis }) {
+function StatisticsContent({ settings, data, language, isDemo, distanceUnits = 'metric', onOpenRange }: Omit<Props, 'data' | 'loading' | 'error' | 'onRetry'> & { data: StatisticsAnalysis }) {
   const t = statisticsTranslations[language]
   const [selectedYear, setSelectedYear] = useState<number | null>(null)
   const year = selectedYear !== null && data.years.includes(selectedYear) ? selectedYear : null
@@ -322,6 +323,7 @@ function StatisticsContent({ data, language, isDemo, distanceUnits = 'metric', o
           {years.map(value => <option key={value} value={value}>{value}</option>)}
         </select>
       </label>
+      {settings}
     </header>
     <Overview distanceUnits={distanceUnits} period={period} language={language} t={t} />
     <div className="statistics-layout">
@@ -341,6 +343,7 @@ export default function Statistics(props: Props) {
   const t = statisticsTranslations[props.language]
   return <section className="statistics-page" aria-label={t.title}>
     <div className="statistics-container">
+      {(props.loading || props.error || !props.data) && props.settings}
       {props.loading ? <div className="statistics-state" role="status"><span className="places-spinner" /><h1>{t.loading}</h1><p>{t.loadingHint}</p></div>
         : props.error ? <div className="statistics-state" role="alert"><Icon name="chart" /><h1>{t.error}</h1><p>{props.error}</p><button className="primary-button" type="button" onClick={props.onRetry}>{t.retry}</button></div>
           : props.data ? <StatisticsContent {...props} data={props.data} />
