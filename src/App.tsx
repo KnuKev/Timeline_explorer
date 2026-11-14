@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { parseTimeline, type TimelinePoint } from './timeline'
 import { demoTimeline, demoStartDate, demoEndDate } from './demoTimeline'
 import { selectPlacesYear, type PlaceEntry } from './places'
@@ -8,6 +8,8 @@ import { getStoredLanguage, languageStorageKey, locales, pointLabel, translation
 import { buildRouteSegments } from './routes'
 import { prepareTimeline, selectTimelineRange, groupTimelineSelection, adjacentRecordedDay, type TimelineDataset } from './timelineIndex'
 import { useTimelineImport } from './useTimelineImport'
+import { useMobileLayout } from './useMobileLayout'
+import { useSlidingIndicator } from './useSlidingIndicator'
 import { usePlaces } from './usePlaces'
 import TimelineMap from './TimelineMap'
 import { getMapColors, getStoredMapBackground, mapBackgroundStorageKey } from './mapAppearance'
@@ -48,37 +50,21 @@ function App() {
   const pointQuality = dataset
   const pointsById = useMemo(() => new Map(importedPoints.map(point => [point.id, point])), [importedPoints])
   const suspectPointIds = useMemo(() => new Set(dataset.excluded.map(entry => entry.point.id)), [dataset])
+  const mobile = useMobileLayout()
   const [activeTab, setActiveTab] = useState<ActiveTab>('map')
   const [sheetExpanded, setSheetExpanded] = useState(false)
   const sheetContent = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!sheetExpanded && window.matchMedia('(max-width: 680px)').matches && sheetContent.current) {
+    if (!sheetExpanded && mobile && sheetContent.current) {
       sheetContent.current.scrollTop = 0
     }
-  }, [sheetExpanded])
+  }, [mobile, sheetExpanded])
 
-  const mainNav = useRef<HTMLElement>(null)
-  useLayoutEffect(() => {
-    const nav = mainNav.current
-    const current = nav?.querySelector<HTMLButtonElement>('[aria-current="page"]')
-    if (!nav || !current) return
-
-    function positionIndicator() {
-      if (!nav || !current) return
-      const navBounds = nav.getBoundingClientRect()
-      const tabBounds = current.getBoundingClientRect()
-      nav.style.setProperty('--nav-indicator-x', `${tabBounds.left - navBounds.left - nav.clientLeft}px`)
-      nav.style.setProperty('--nav-indicator-width', `${tabBounds.width}px`)
-    }
-
-    positionIndicator()
-    const observer = new ResizeObserver(positionIndicator)
-    for (const button of nav.children) observer.observe(button)
-    return () => observer.disconnect()
-  }, [activeTab, language])
+  const mainNav = useSlidingIndicator<HTMLElement>(activeTab, '[aria-current="page"]')
   const [fileDialog, setFileDialog] = useState<'merge' | 'export' | null>(null)
   const [placeMode, setPlaceMode] = useState<'countries' | 'cities'>('countries')
+  const placeTabs = useSlidingIndicator<HTMLDivElement>(activeTab === 'places' ? placeMode : activeTab)
   const [placeYear, setPlaceYear] = useState('all')
   const [placesRequested, setPlacesRequested] = useState(false)
   const [statisticsRequested, setStatisticsRequested] = useState(false)
@@ -272,9 +258,10 @@ function App() {
   return (
     <main data-sheet={sheetExpanded ? 'expanded' : 'hidden'} className={'app-shell' + (isDark ? ' dark' : '')} data-view={activeTab}>
       <header className="floating-toolbar">
-        <nav ref={mainNav} className="main-nav" aria-label={t.navigation}>
-          <button className={'nav-item' + (activeTab === 'map' ? ' is-current' : '')} aria-current={activeTab === 'map' ? 'page' : undefined} aria-controls="map-sheet-content" type="button" onClick={() => {
-            if (activeTab === 'map' && window.matchMedia('(max-width: 680px)').matches) {
+        <nav ref={mainNav} className="main-nav sliding-indicator" aria-label={t.navigation}>
+          <button className={'nav-item' + (activeTab === 'map' ? ' is-current' : '')} aria-current={activeTab === 'map' ? 'page' : undefined} aria-controls={mobile && activeTab === 'map' ? 'map-sheet-content' : undefined}
+            aria-expanded={mobile && activeTab === 'map' ? sheetExpanded : undefined} type="button" onClick={() => {
+            if (activeTab === 'map' && mobile) {
               setSheetExpanded(expanded => !expanded)
             }
             setActiveTab('map')
@@ -321,9 +308,9 @@ function App() {
             <p>{t.placesIntro}</p>
           </header>
           <div className="places-controls">
-            <div className="places-tabs" role="tablist" aria-label={t.placeType}>
-              <button type="button" role="tab" aria-selected={placeMode === 'countries'} className={placeMode === 'countries' ? 'selected' : ''} onClick={() => setPlaceMode('countries')}>{t.countries} <span>{selectedPlaces?.countries.length.toLocaleString(locale) ?? '–'}</span></button>
-              <button type="button" role="tab" aria-selected={placeMode === 'cities'} className={placeMode === 'cities' ? 'selected' : ''} onClick={() => setPlaceMode('cities')}>{t.cities} <span>{selectedPlaces?.cities.length.toLocaleString(locale) ?? '–'}</span></button>
+            <div ref={placeTabs} className="places-tabs report-switch sliding-indicator" role="group" aria-label={t.placeType}>
+              <button type="button" aria-pressed={placeMode === 'countries'} onClick={() => setPlaceMode('countries')}>{t.countries} <span>{selectedPlaces?.countries.length.toLocaleString(locale) ?? '–'}</span></button>
+              <button type="button" aria-pressed={placeMode === 'cities'} onClick={() => setPlaceMode('cities')}>{t.cities} <span>{selectedPlaces?.cities.length.toLocaleString(locale) ?? '–'}</span></button>
             </div>
             {selectedPlaces && <div className="places-total">
               <strong>{places.length.toLocaleString(locale)}</strong>
@@ -354,8 +341,10 @@ function App() {
             <div className="sheet-import">
               <div className="sidebar-heading"><h1>{t.myTimeline}</h1><span className="sidebar-status"><span />{isDemo ? t.exampleData : t.localFile}</span></div>
               <section className="import-card">
-                <div className="import-icon"><Icon name="upload" /></div>
-                <div className="import-copy">
+                <div className="import-icon" data-loaded={!isDemo && !importStage && !error}>
+                  <Icon name={!isDemo && !importStage && !error ? 'check' : 'upload'} />
+                </div>
+                <div className="import-copy" role="status">
                   <strong title={fileName || t.importTimeline}>{fileName || t.importTimeline}</strong>
                   <span className={isDemo ? "mobile-hide-copy" : undefined}>{isDemo ? t.sampleHint : t.fileLoaded}</span>
                 </div>
@@ -385,19 +374,15 @@ function App() {
                 }}>{t.lastDay}</button>
               </div>
 
-              <div className="segmented-control" role="tablist" aria-label={t.selectPeriod}>
+              <div className="segmented-control" role="group" aria-label={t.selectPeriod}>
                 <button
                   type="button"
-                  role="tab"
-                  aria-selected={dateMode === 'day'}
-                  className={dateMode === 'day' ? 'selected' : ''}
+                  aria-pressed={dateMode === 'day'}
                   onClick={() => { setDateMode('day'); setPlaceViewEnabled(false); setTripScope(null) }}
                 >{t.oneDay}</button>
                 <button
                   type="button"
-                  role="tab"
-                  aria-selected={dateMode === 'period'}
-                  className={dateMode === 'period' ? 'selected' : ''}
+                  aria-pressed={dateMode === 'period'}
                   onClick={() => { setDateMode('period'); setPlaceViewEnabled(false); setTripScope(null) }}
                 >{t.period}</button>
               </div>

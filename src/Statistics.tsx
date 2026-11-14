@@ -1,9 +1,11 @@
-import { memo, useMemo, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
+import { memo, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import type { StatisticsAnalysis, StatisticsPeriod } from './statistics'
 import { locales, translations, type Language } from './i18n'
 import { distanceInUnits, distanceUnit, formatCalendarDate, formatDistance, formatLargeDistance, formatPlaceDate, type DistanceUnits } from './formatting'
 import { statisticsTranslations } from './statisticsI18n'
 import Icon from './Icon'
+import { useMobileLayout } from './useMobileLayout'
+import { useSlidingIndicator } from './useSlidingIndicator'
 import MoonIllustration from './MoonIllustration'
 import './Statistics.css'
 
@@ -58,6 +60,7 @@ const Overview = memo(function Overview({ period, language, t, distanceUnits }: 
 
 const TransportChart = memo(function TransportChart({ period, language, t, distanceUnits }: DistancePeriodProps) {
   const [unit, setUnit] = useState<'distance' | 'time'>('distance')
+  const unitSwitch = useSlidingIndicator<HTMLDivElement>(unit)
   const locale = locales[language]
   const categories = [
     { category: 'flight', label: t.transportFlight, icon: 'plane' },
@@ -80,7 +83,7 @@ const TransportChart = memo(function TransportChart({ period, language, t, dista
   }
   return <article className="statistics-card statistics-transport">
     <CardHeading title={t.transport} subtitle={unit === 'distance' ? t.transportDistance : t.transportTime}>
-      <div className="statistics-switch" role="group" aria-label={t.transportUnit}>
+      <div ref={unitSwitch} className="statistics-switch sliding-indicator" role="group" aria-label={t.transportUnit}>
         <button type="button" aria-pressed={unit === 'distance'} onClick={() => setUnit('distance')}>{distanceUnit(distanceUnits)}</button>
         <button type="button" aria-pressed={unit === 'time'} onClick={() => setUnit('time')}>{t.transportHours}</button>
       </div>
@@ -195,16 +198,8 @@ const MovementClock = memo(function MovementClock({ period, language, t }: Perio
   </article>
 })
 
-const mobileCalendarQuery = '(max-width: 680px)'
-
-function subscribeToCalendarWidth(onChange: () => void) {
-  const media = window.matchMedia(mobileCalendarQuery)
-  media.addEventListener('change', onChange)
-  return () => media.removeEventListener('change', onChange)
-}
-
 function Calendar({ period, year, years, language, t, distanceUnits, onOpenRange }: DistancePeriodProps & { year: number | null; years: number[]; onOpenRange: Props['onOpenRange'] }) {
-  const mobile = useSyncExternalStore(subscribeToCalendarWidth, () => window.matchMedia(mobileCalendarQuery).matches, () => false)
+  const mobile = useMobileLayout()
   const [ownYear, setOwnYear] = useState<number | null>(null)
   const calendarYear = year ?? (ownYear !== null && years.includes(ownYear) ? ownYear : Math.max(...years))
   const locale = locales[language]

@@ -29,7 +29,7 @@ export default function SettingsMenu({ language, distanceUnits, isDark, mapBackg
 
   useEffect(() => {
     if (!open) return
-    const onPointerDown = (event: PointerEvent) => {
+    const closeFromOutside = (event: Event) => {
       if (event.target instanceof Node && !panel.current?.contains(event.target)) setOpen(false)
     }
     const onKeyDown = (event: KeyboardEvent) => {
@@ -38,10 +38,12 @@ export default function SettingsMenu({ language, distanceUnits, isDark, mapBackg
       setOpen(false)
       cornerButton.current?.focus()
     }
-    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('pointerdown', closeFromOutside, true)
+    document.addEventListener('focusin', closeFromOutside)
     document.addEventListener('keydown', onKeyDown)
     return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('pointerdown', closeFromOutside, true)
+      document.removeEventListener('focusin', closeFromOutside)
       document.removeEventListener('keydown', onKeyDown)
     }
   }, [open])

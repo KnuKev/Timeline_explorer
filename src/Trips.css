@@ -10,12 +10,6 @@
 .trips-select.compact select { min-width: 130px; height: 34px; font-size: 11px; }
 .trips-settings { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px 18px; margin-bottom: 20px; }
 .trips-select.trips-scope-select { display: none; }
-.trips-scope-switch { display: inline-flex; justify-self: start; max-width: 100%; align-items: stretch; min-width: 0; overflow-x: auto; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-muted); }
-.trips-scope-switch button { display: inline-flex; flex: none; align-items: center; gap: 9px; min-height: 34px; padding: 8px 16px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); font-size: 12px; font-weight: 500; cursor: pointer; }
-.trips-scope-switch button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px #00000012; }
-.trips-scope-switch button:disabled { cursor: default; }
-.trips-scope-switch button > span { padding: 2px 5px; border-radius: 4px; background: var(--surface-muted); color: var(--text-tertiary); font-size: 10px; font-variant-numeric: tabular-nums; }
-.trips-scope-switch button[aria-pressed="true"] > span { background: var(--accent-soft); color: var(--accent); }
 .trips-select.trips-radius { flex-direction: row; align-items: center; gap: 8px; }
 .trips-select.trips-radius select { min-width: 0; }
 .trips-radius-hint { grid-column: 1 / -1; justify-self: end; margin: 0; color: var(--text-tertiary); font-size: 10px; line-height: 1.5; text-align: right; }
@@ -156,10 +150,6 @@
   .trips-section-heading { align-items: flex-start; gap: 12px; flex-wrap: wrap; }
   .trips-history-controls { justify-content: flex-start; }
   .trips-state.trips-empty { min-height: 320px; padding: 25px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .trips-spinner { animation-duration: 2s; }
-  .trips-destination-card { transition: none; }
 }
 
 .trips-home-controls { display: flex; justify-self: end; align-items: center; flex-wrap: wrap; gap: 8px 12px; }

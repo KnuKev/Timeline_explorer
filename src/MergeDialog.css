@@ -10,6 +10,14 @@
   box-shadow: var(--shadow);
 }
 .merge-dialog::backdrop { background: #10152280; }
+.merge-dialog[open] { animation: dialog-in var(--motion-standard) var(--motion-ease) both; }
+.merge-dialog[open]::backdrop { animation: backdrop-in var(--motion-standard) ease-out both; }
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(.99); }
+}
+@keyframes backdrop-in {
+  from { opacity: 0; }
+}
 .merge-dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .merge-dialog h2 { margin: 0; font-size: 21px; letter-spacing: -.4px; }
 .merge-close { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; padding: 0; border: 0; border-radius: 8px; background: var(--surface-muted); color: var(--text-secondary); cursor: pointer; }

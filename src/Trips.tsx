@@ -6,6 +6,7 @@ import { tripsTranslations } from './tripsI18n'
 import { foreignCountryCodes, groupTripHistory, selectTripHistory, type TripScope, type TripViewGroup } from './tripsView'
 import { homeRadiusOptionsKm } from './tripSettings'
 import Icon from './Icon'
+import { useSlidingIndicator } from './useSlidingIndicator'
 import './Trips.css'
 
 type Props = {
@@ -156,6 +157,7 @@ export default function Trips({ settings, data, loading, error, language, isDemo
   const counts = useMemo(() => yearTrips.reduce((result, trip) => { result[trip.scope]++; return result }, { domestic: 0, international: 0, unknown: 0 }), [yearTrips])
   const defaultScope: TripScope = counts.domestic ? 'domestic' : counts.international ? 'international' : counts.unknown ? 'unknown' : 'domestic'
   const scope = selectedScope === null || (selectedScope === 'unknown' && !counts.unknown) ? defaultScope : selectedScope
+  const scopeSwitch = useSlidingIndicator<HTMLDivElement>(scope)
   const trips = useMemo(() => selectTripHistory(yearTrips, { scope }), [yearTrips, scope])
   const groups = useMemo(() => groupTripHistory(trips, scope), [trips, scope])
   const totalNights = useMemo(() => trips.reduce((sum, trip) => sum + trip.nights, 0), [trips])
@@ -172,7 +174,7 @@ export default function Trips({ settings, data, loading, error, language, isDemo
     <p className="trips-intro">{t.intro}</p>
     <div className="trips-settings">
       <p className="trips-radius-hint" id={radiusHintId}>{t.radiusHint.replace('{radius}', formatLargeDistance(homeRadiusKm, locale, distanceUnits))}</p>
-      <div className="trips-scope-switch" role="group" aria-label={t.tripScope}>
+      <div ref={scopeSwitch} className="trips-scope-switch report-switch sliding-indicator" role="group" aria-label={t.tripScope}>
         {scopes.map(candidate => <button type="button" key={candidate} disabled={!ready} aria-pressed={scope === candidate} onClick={() => setScope(candidate)}>{scopeLabels[candidate]}{ready && <span>{counts[candidate].toLocaleString(locale)}</span>}</button>)}
       </div>
       <label className="trips-select compact trips-scope-select">

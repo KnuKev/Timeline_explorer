@@ -1,12 +1,13 @@
 import type { ReactNode, SVGProps } from 'react'
 
-type IconName = 'map' | 'route' | 'globe' | 'chart' | 'upload' | 'shield' | 'pin' | 'sun' | 'moon' | 'close' | 'left' | 'right' | 'down' | 'plus' | 'minus' | 'fit' | 'arrow' | 'merge' | 'plane' | 'car' | 'train' | 'question' | 'settings' | 'satellite' | 'download'
+type IconName = 'map' | 'route' | 'globe' | 'chart' | 'upload' | 'shield' | 'check' | 'pin' | 'sun' | 'moon' | 'close' | 'left' | 'right' | 'down' | 'plus' | 'minus' | 'fit' | 'arrow' | 'merge' | 'plane' | 'car' | 'train' | 'question' | 'settings' | 'satellite' | 'download'
 const paths: Record<IconName, ReactNode> = {
   map: <><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2Z" /><path d="M9 3v16M15 5v16" /></>,
   route: <><circle cx="6" cy="5" r="2" /><circle cx="18" cy="19" r="2" /><path d="M8 5h7a4 4 0 0 1 0 8H9a3 3 0 0 0 0 6h7" /></>,
   globe: <><circle cx="12" cy="12" r="9" /><ellipse cx="12" cy="12" rx="4" ry="9" /><path d="M3 12h18" /></>,
   chart: <><path d="M4 4v16h17M9 15v-4M14 15V7M19 15v-6" /></>,
   upload: <><path d="M12 15V3m-4 4 4-4 4 4M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" /></>,
+  check: <path d="m5 12 4 4L19 6" />,
   shield: <><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z" /><path d="m8 12 3 3 5-6" /></>,
   pin: <><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 0 1 14 0Z" /><circle cx="12" cy="10" r="2.5" /></>,
   sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" /></>,
