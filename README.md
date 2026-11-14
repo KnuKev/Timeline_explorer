@@ -64,10 +64,6 @@ Visualize total recorded distance, monthly travel patterns, time-of-day activity
 ![Statistics view showing total distance, monthly bar charts, and daily movement clock](docs/images/statistics1.png)
 ![Statistics breakdown with distance calendar, transport types, and human-powered distance comparison](docs/images/statistics2.png)
 
-## Credits
-
-Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright). Satellite imagery from [EOxCloudless](https://cloudless.eox.at) by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2016). Place names from [GeoNames](https://www.geonames.org/) (CC BY 4.0). Country outlines from Natural Earth via `world-atlas`. Low-zoom land cover from [Natural Earth I with Shaded Relief](https://www.naturalearthdata.com/downloads/50m-raster-data/50m-natural-earth-1/). [Roboto font license](public/fonts/OFL.txt).
-
 ## Mobile screenshots
 
 <table>
@@ -82,3 +78,9 @@ Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright
     <td width="33%"><img src="docs/images/mobile/mobile_stats2.jpg" width="100%" alt="Travel statistics and activity charts on iPhone"></td>
   </tr>
 </table>
+
+
+## Credits
+
+Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright). Satellite imagery from [EOxCloudless](https://cloudless.eox.at) by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2016). Place names from [GeoNames](https://www.geonames.org/) (CC BY 4.0). Country outlines from Natural Earth via `world-atlas`. Low-zoom land cover from [Natural Earth I with Shaded Relief](https://www.naturalearthdata.com/downloads/50m-raster-data/50m-natural-earth-1/). [Roboto font license](public/fonts/OFL.txt).
+
