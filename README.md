@@ -22,7 +22,7 @@ Your file stays in browser memory and is never uploaded to GitHub. Refreshing th
 
 ## Mobile layout
 
-On smaller screens, the four tabs sit in a navigation bar at the bottom. In **Map**, drag the panel up to change the date range, see the route summary, or import a file. When the panel reaches the top, scroll to see the rest of its contents. In **Statistics**, **Year in motion** shows the year as twelve mini calendars. Tap a day with recorded data to open it on the map.
+On smaller screens, the four tabs sit in a navigation bar at the bottom. In **Map**, tap **Show details** to open the date controls, route summary, and file import. Scroll for more details, or tap **Show map** to return to the map. In **Statistics**, **Year in motion** shows the year as twelve mini calendars. Tap a day with recorded data to open it on the map.
 
 ## Combine Timeline files
 
@@ -67,3 +67,18 @@ Visualize total recorded distance, monthly travel patterns, time-of-day activity
 ## Credits
 
 Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright). Satellite imagery from [EOxCloudless](https://cloudless.eox.at) by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2016). Place names from [GeoNames](https://www.geonames.org/) (CC BY 4.0). Country outlines from Natural Earth via `world-atlas`. Low-zoom land cover from [Natural Earth I with Shaded Relief](https://www.naturalearthdata.com/downloads/50m-raster-data/50m-natural-earth-1/). [Roboto font license](public/fonts/OFL.txt).
+
+## Mobile screenshots
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/images/mobile/mobile_map1.jpg" width="100%" alt="Timeline Explorer map on iPhone"></td>
+    <td width="33%"><img src="docs/images/mobile/mobile_map2.jpg" width="100%" alt="Map details and date controls on iPhone"></td>
+    <td width="33%"><img src="docs/images/mobile/mobile_trips.jpg" width="100%" alt="Trips overview on iPhone"></td>
+  </tr>
+  <tr>
+    <td width="33%"><img src="docs/images/mobile/mobile_places.jpg" width="100%" alt="Places grid on iPhone"></td>
+    <td width="33%"><img src="docs/images/mobile/mobile_stats1.jpg" width="100%" alt="Statistics overview on iPhone"></td>
+    <td width="33%"><img src="docs/images/mobile/mobile_stats2.jpg" width="100%" alt="Travel statistics and activity charts on iPhone"></td>
+  </tr>
+</table>

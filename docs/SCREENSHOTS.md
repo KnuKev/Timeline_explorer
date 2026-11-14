@@ -19,3 +19,16 @@ To add another image, save it in the same folder and add this to the root README
 ```
 
 Use paths relative to the README, and include the image file in the same commit. You can check the result in GitHub's **Preview** tab when editing the README. See [GitHub's image syntax](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#images).
+
+## Mobile screenshots
+
+Save the six iPhone JPEGs in `docs/images/mobile/` with these filenames. The README displays them in two rows of three.
+
+| File | View |
+| --- | --- |
+| `mobile_map1.jpg` | Map |
+| `mobile_map2.jpg` | Map details |
+| `mobile_trips.jpg` | Trips |
+| `mobile_places.jpg` | Places |
+| `mobile_stats1.jpg` | Statistics overview |
+| `mobile_stats2.jpg` | More statistics |
