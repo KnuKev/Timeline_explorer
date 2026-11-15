@@ -24,6 +24,10 @@ Your file stays in browser memory and is never uploaded to GitHub. Refreshing th
 
 On smaller screens, the four tabs sit in a navigation bar at the bottom. In **Map**, tap **Show details** to open the date controls, route summary, and file import. Scroll for more details, or tap **Show map** to return to the map. In **Statistics**, **Year in motion** shows the year as twelve mini calendars. Tap a day with recorded data to open it on the map.
 
+## Globe view
+
+Open **Settings → Globe** to rotate a 3D view of the selected routes and flights. The globe draws your Timeline locally and uses simplified country outlines from Natural Earth. Open a city from **Places** to explore its points or heatmap on the flat map.
+
 ## Combine Timeline files
 
 Click the **Merge** icon in settings, choose two Timeline JSON files, and download the combined file. The originals stay unchanged. Duplicate records are removed, missing data is filled from either file, and conflicting values are preserved. Open the downloaded JSON with **Map → Choose file**.
@@ -82,5 +86,5 @@ Visualize total recorded distance, monthly travel patterns, time-of-day activity
 
 ## Credits
 
-Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright). Satellite imagery from [EOxCloudless](https://cloudless.eox.at) by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2016). Place names from [GeoNames](https://www.geonames.org/) (CC BY 4.0). Country outlines from Natural Earth via `world-atlas`. Low-zoom land cover from [Natural Earth I with Shaded Relief](https://www.naturalearthdata.com/downloads/50m-raster-data/50m-natural-earth-1/). [Roboto font license](public/fonts/OFL.txt).
+Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright). Place names from [GeoNames](https://www.geonames.org/) (CC BY 4.0). Country outlines from Natural Earth via `world-atlas`. Low-zoom land cover from [Natural Earth I with Shaded Relief](https://www.naturalearthdata.com/downloads/50m-raster-data/50m-natural-earth-1/). [Roboto font license](public/fonts/OFL.txt).
 

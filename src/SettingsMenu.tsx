@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { DistanceUnits } from './formatting'
 import { translations, type Language } from './i18n'
-import type { MapBackground } from './mapAppearance'
+import type { MapView } from './mapAppearance'
 import { mergeTranslations } from './mergeI18n'
 import Icon from './Icon'
 
@@ -9,8 +9,9 @@ type Props = {
   language: Language
   distanceUnits: DistanceUnits
   isDark: boolean
-  mapBackground: MapBackground
-  onMapBackgroundChange: (background: MapBackground) => void
+  mapView: MapView
+  globeDisabled: boolean
+  onMapViewChange: (background: MapView) => void
   onLanguageChange: (language: Language) => void
   onDistanceUnitsChange: (units: DistanceUnits) => void
   onToggleTheme: () => void
@@ -18,7 +19,7 @@ type Props = {
   onExport: () => void
 }
 
-export default function SettingsMenu({ language, distanceUnits, isDark, mapBackground, onMapBackgroundChange, onLanguageChange, onDistanceUnitsChange, onToggleTheme, onMerge, onExport }: Props) {
+export default function SettingsMenu({ language, distanceUnits, isDark, mapView, globeDisabled, onMapViewChange, onLanguageChange, onDistanceUnitsChange, onToggleTheme, onMerge, onExport }: Props) {
   const [open, setOpen] = useState(false)
   const panel = useRef<HTMLDivElement>(null)
   const cornerButton = useRef<HTMLButtonElement>(null)
@@ -71,9 +72,9 @@ export default function SettingsMenu({ language, distanceUnits, isDark, mapBackg
           <button type="button" lang="en" aria-label="English" aria-pressed={language === 'en'} onClick={() => onLanguageChange('en')}>EN</button>
         </div>
         <button className="toolbar-button settings-merge" type="button" title={mergeLabel} aria-label={mergeLabel} aria-haspopup="dialog" onClick={() => openDialog(onMerge)}><Icon name="merge" /></button>
-        <div className="toolbar-switch settings-map" role="group" aria-label={t.mapBackground}>
-          <button type="button" aria-label={t.map} title={t.map} aria-pressed={mapBackground === 'map'} onClick={() => onMapBackgroundChange('map')}><Icon name="map" /></button>
-          <button type="button" aria-label={t.satellite} title={t.satellite} aria-pressed={mapBackground === 'satellite'} onClick={() => onMapBackgroundChange('satellite')}><Icon name="satellite" /></button>
+        <div className="toolbar-switch settings-map" role="group" aria-label={t.mapView}>
+          <button type="button" aria-label={t.map} title={t.map} aria-pressed={mapView === 'map'} onClick={() => onMapViewChange('map')}><Icon name="map" /></button>
+          <button type="button" aria-label={t.globe} disabled={globeDisabled} title={globeDisabled ? t.globeCityHint : t.globe} aria-pressed={mapView === 'globe'} onClick={() => onMapViewChange('globe')}><Icon name="globe" /></button>
         </div>
         <button className="toolbar-button settings-export" type="button" title={t.exportTimeline} aria-label={t.exportTimeline} aria-haspopup="dialog" onClick={() => openDialog(onExport)}><Icon name="download" /></button>
       </div>

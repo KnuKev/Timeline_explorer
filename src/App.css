@@ -160,7 +160,7 @@
 .nav-item:disabled { opacity: .45; cursor: default; }
 .toolbar-switch { position: relative; isolation: isolate; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; padding: 3px; border-radius: 8px; background: var(--surface-muted); }
 .toolbar-switch button { display: grid; place-items: center; min-width: 0; height: calc(var(--settings-cell) - 6px); padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 11px; font-weight: 500; cursor: pointer; }
-:is(.toolbar-switch, .segmented-control)::before {
+:is(.toolbar-switch, .segmented-control, .transport-unit-switch)::before {
   content: "";
   position: absolute;
   z-index: -1;
@@ -172,7 +172,7 @@
   pointer-events: none;
   transition: transform var(--motion-standard) var(--motion-ease);
 }
-:is(.toolbar-switch, .segmented-control):has(button:last-child[aria-pressed="true"])::before { transform: translateX(100%); }
+:is(.toolbar-switch, .segmented-control, .transport-unit-switch):has(button:last-child[aria-pressed="true"])::before { transform: translateX(100%); }
 .toolbar-switch button[aria-pressed="true"] { color: var(--text); }
 @media (hover: hover) {
   :is(.toolbar-switch, .segmented-control) button[aria-pressed="false"]:hover { color: var(--text); }
@@ -307,15 +307,35 @@
 .map-land-cover { mix-blend-mode: multiply; pointer-events: none; }
 .dark .map-area, .dark .map-view { background: #191e26; }
 .dark .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) saturate(.4) brightness(.85) contrast(.88); }
-.map-area[data-background="satellite"] .map-view { background: #172638; }
-.map-area[data-background="satellite"] .leaflet-tile-pane { filter: none; }
+.map-area[data-map-view="globe"] { background: #eaf1f8; }
+.dark .map-area[data-map-view="globe"] { background: #090f1b; }
+.globe-view { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; }
+.globe-zoom-controls { z-index: 100; }
+.globe-credit, .globe-status {
+  position: absolute;
+  z-index: 100;
+  color: var(--text-secondary);
+  background: var(--map-surface);
+}
+.globe-credit { right: 0; bottom: 0; padding: 1px 5px; font-size: 10px; }
+.globe-status {
+  top: 76px;
+  left: max(calc(var(--sidebar-width) + 2 * var(--workspace-gap)), 16px);
+  right: 16px;
+  width: fit-content;
+  margin: 0 auto;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+}
 .leaflet-control-attribution { color: var(--text-secondary) !important; background: var(--map-surface) !important; font-size: 10px !important; }
 .leaflet-control-attribution a { color: inherit !important; text-decoration: underline; }
 .leaflet-control-zoom { display: none; }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface); color: var(--text); }
 .leaflet-popup-content { font-size: 12px; line-height: 1.55; }
 .leaflet-container a.leaflet-popup-close-button { color: var(--text-secondary); }
-.timeline-point-canvas { position: absolute; z-index: 450; top: 0; left: 0; pointer-events: none; }
+.timeline-point-canvas { transform-origin: 0 0; position: absolute; z-index: 450; top: 0; left: 0; pointer-events: none; }
 .scope-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
 .scope-actions strong { flex-basis: 100%; font-size: 12px; overflow-wrap: anywhere; }
 .scope-toggle { max-width: 100%; overflow-wrap: anywhere; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text-secondary); font-size: 11px; font-weight: 500; cursor: pointer; }
@@ -557,6 +577,8 @@
   }
   .map-zoom-controls button { width: var(--touch-target); height: var(--touch-target); }
   .map-zoom-controls .map-zoom-step { display: none; }
+  .globe-credit { right: auto; left: 8px; bottom: calc(var(--map-overlay-offset) + 1px); border-radius: 4px; }
+  .globe-status { left: 16px; top: calc(var(--safe-top) + 12px); }
   .selected-card { inset: calc(var(--safe-top) + 10px) 12px auto; margin: 0; max-width: calc(100% - 24px); }
   .selected-card { min-height: 64px; padding-inline-end: 62px; }
   .report-heading {

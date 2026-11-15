@@ -1,10 +1,10 @@
 export const MIN_MAP_ZOOM = -4
 
-export type MapBackground = 'map' | 'satellite'
-export const mapBackgroundStorageKey = 'timeline-explorer-map-background'
+export type MapView = 'map' | 'globe'
+export const mapViewStorageKey = 'timeline-explorer-map-background'
 
-export function getStoredMapBackground(): MapBackground {
-  try { return localStorage.getItem(mapBackgroundStorageKey) === 'satellite' ? 'satellite' : 'map' }
+export function getStoredMapView(): MapView {
+  try { return localStorage.getItem(mapViewStorageKey) === 'globe' ? 'globe' : 'map' }
   catch { return 'map' }
 }
 

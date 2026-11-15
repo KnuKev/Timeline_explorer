@@ -7,6 +7,10 @@ import ts from 'typescript'
 // Use the project's compiler so tests also work on Node builds without type stripping.
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier.endsWith('?url')) {
+      const asset = nextResolve(specifier.slice(0, -4), context)
+      return { ...asset, url: asset.url + '?url' }
+    }
     // Match Vite's extensionless local TypeScript imports for component SSR tests.
     if (specifier.startsWith('.') && context.parentURL?.startsWith('file:')) {
       const url = new URL(specifier, context.parentURL)
@@ -20,6 +24,7 @@ registerHooks({
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
+    if (url.endsWith('?url')) return { format: 'module', shortCircuit: true, source: `export default ${JSON.stringify(url.slice(0, -4))}` }
     // CSS remains handled by Vite in the app; server-render tests inspect markup.
     if (url.endsWith('.css')) return { format: 'module', shortCircuit: true, source: '' }
     if (/\.tsx?$/.test(url)) {

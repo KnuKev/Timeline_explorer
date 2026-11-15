@@ -13,7 +13,7 @@ import { useSlidingIndicator } from './useSlidingIndicator'
 import { usePlaces } from './usePlaces'
 import TimelineMap from './TimelineMap'
 import { buildCityHeatCells } from './cityHeatmap'
-import { getMapColors, getStoredMapBackground, mapBackgroundStorageKey } from './mapAppearance'
+import { getMapColors, getStoredMapView, mapViewStorageKey, type MapView } from './mapAppearance'
 import PointList from './PointList'
 import Icon from './Icon'
 import SettingsMenu from './SettingsMenu'
@@ -24,6 +24,13 @@ import './App.css'
 type DateMode = 'day' | 'period'
 type ActiveTab = 'map' | 'trips' | 'places' | 'statistics'
 type PlaceScope = { kind: 'country' | 'city'; name: string; key: string; countryName?: string; countryCode?: string }
+const TimelineGlobe = lazy(() => import('./TimelineGlobe').catch(() => ({ default: GlobeLoadFailure })))
+
+function GlobeLoadFailure({ onUnavailable }: { onUnavailable: () => void }) {
+  useEffect(onUnavailable, [onUnavailable])
+  return <></>
+}
+
 const Statistics = lazy(() => import('./Statistics.tsx'))
 const Trips = lazy(() => import('./Trips.tsx'))
 const MergeDialog = lazy(() => import('./MergeDialog.tsx'))
@@ -81,8 +88,17 @@ function App() {
   const [homeDialogOpen, setHomeDialogOpen] = useState(false)
   const homeLocations = isDemo ? demoHome : storedHome
   const [isDark, setIsDark] = useState(() => { try { return localStorage.getItem('timeline-explorer-dark') === 'true' } catch { return false } })
-  const [mapBackground, setMapBackground] = useState(getStoredMapBackground)
-  const mapColors = getMapColors(isDark || mapBackground === 'satellite')
+  const [mapView, setMapView] = useState(getStoredMapView)
+  const [globeError, setGlobeError] = useState(false)
+  const globeUnavailable = useCallback(() => {
+    setMapView('map')
+    setGlobeError(true)
+  }, [])
+  const changeMapView = (view: MapView) => {
+    setGlobeError(false)
+    setMapView(view)
+  }
+  const mapColors = getMapColors(isDark)
   const [isPointListExpanded, setIsPointListExpanded] = useState(false)
   const [dateMode, setDateMode] = useState<DateMode>('period')
   const [selectedDate, setSelectedDate] = useState(demoStartDate)
@@ -92,7 +108,7 @@ function App() {
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null)
   const { data: placeAnalysis, statistics, trips, loading: placesLoading, statisticsLoading, tripsLoading, error: placesError, retry: retryPlaces } = usePlaces(dataset, showSuspectPoints, placesRequested, statisticsRequested, tripsRequested, homeRadiusKm, homeLocations)
   useEffect(() => { try { localStorage.setItem('timeline-explorer-dark', String(isDark)) } catch { /* Storage is optional. */ } }, [isDark])
-  useEffect(() => { try { localStorage.setItem(mapBackgroundStorageKey, mapBackground) } catch { /* Storage is optional. */ } }, [mapBackground])
+  useEffect(() => { try { localStorage.setItem(mapViewStorageKey, mapView) } catch { /* Storage is optional. */ } }, [mapView])
   useEffect(() => { try { localStorage.setItem(homeRadiusStorageKey, String(storedRadiusKm)) } catch { /* The radius also works without storage. */ } }, [storedRadiusKm])
 
   const availableDays = useMemo(() => dataset.days.filter(day => showSuspectPoints || day.cleanCount > 0).map(day => day.day), [dataset, showSuspectPoints])
@@ -111,6 +127,7 @@ function App() {
     return places?.find(place => place.key === placeScope.key)
   }, [placeScope, placeViewEnabled, selectedPlaces])
   const isCityView = !tripScope && placeViewEnabled && placeScope?.kind === 'city'
+  const showingGlobe = !isCityView && mapView === 'globe'
   const [cityLayer, setCityLayer] = useState<'points' | 'heatmap'>('points')
   const cityLayerSwitch = useSlidingIndicator<HTMLDivElement>(activeTab === 'map' && isCityView ? cityLayer : 'hidden')
   const mapPoints = useMemo(() => {
@@ -260,7 +277,7 @@ function App() {
   ))
 
   const settingsMenu = <SettingsMenu language={language} distanceUnits={distanceUnits} isDark={isDark}
-          mapBackground={mapBackground} onMapBackgroundChange={setMapBackground}
+          mapView={activeTab === 'map' && isCityView ? 'map' : mapView} globeDisabled={activeTab === 'map' && isCityView} onMapViewChange={changeMapView}
           onLanguageChange={setLanguage} onDistanceUnitsChange={setDistanceUnits}
           onToggleTheme={() => setIsDark(current => !current)} onMerge={() => setFileDialog('merge')} onExport={() => setFileDialog('export')} />
   const reportSettings = <div className="report-settings">{settingsMenu}</div>
@@ -469,8 +486,13 @@ function App() {
           </div>
         </aside>
 
-        <section className="map-area" data-background={mapBackground} aria-label={t.mapLabel}>
-          <TimelineMap mapBackground={mapBackground} points={mapPoints} routeSegments={route.segments} pointsOnly={isCityView} heatCells={heatCells} selectedPointId={selectedPointId} isDark={isDark} language={language} onSelect={setSelectedPointId} active={activeTab === 'map'} />
+        <section className="map-area" data-map-view={showingGlobe ? 'globe' : 'map'} aria-label={t.mapLabel}>
+          {showingGlobe ? <Suspense fallback={<p className="globe-status" role="status">{t.loadingGlobe}</p>}>
+            <TimelineGlobe active={activeTab === 'map'} points={mapPoints} routeSegments={route.segments} selectedPoint={selectedPoint}
+              isDark={isDark} language={language} onSelect={setSelectedPointId} onUnavailable={globeUnavailable} />
+          </Suspense> : <TimelineMap points={mapPoints} routeSegments={route.segments} pointsOnly={isCityView} heatCells={heatCells}
+            selectedPointId={selectedPointId} isDark={isDark} language={language} onSelect={setSelectedPointId} active={activeTab === 'map'} />}
+          {globeError && <p className="globe-status" role="status">{t.globeUnavailable}</p>}
 
           {isCityView ? <div className="map-bottom-overlay city-map-overlay">
             <div ref={cityLayerSwitch} className="report-switch sliding-indicator city-layer-switch" role="group" aria-label={t.cityMapLayer}>
@@ -484,7 +506,7 @@ function App() {
             <div className="map-legend">
               <span className="legend-item"><span className="legend-line" style={{ background: mapColors.route }} />{t.route}</span>
               {hasFlights && <span className="legend-item" title={t.flightRouteHint}><span className="legend-line flight" style={{ borderColor: mapColors.route }} />{t.flightRoute}</span>}
-              <span className="legend-item" title={t.zoomHint}><span className="legend-dot" style={{ background: mapColors.point }} />{t.positionPoint}</span>
+              <span className="legend-item" title={showingGlobe ? undefined : t.zoomHint}><span className="legend-dot" style={{ background: mapColors.point }} />{t.positionPoint}</span>
             </div>
           </div>}
 

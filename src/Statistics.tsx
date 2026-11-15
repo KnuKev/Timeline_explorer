@@ -5,7 +5,6 @@ import { distanceInUnits, distanceUnit, formatCalendarDate, formatDistance, form
 import { statisticsTranslations } from './statisticsI18n'
 import Icon from './Icon'
 import { useMobileLayout } from './useMobileLayout'
-import { useSlidingIndicator } from './useSlidingIndicator'
 import MoonIllustration from './MoonIllustration'
 import './Statistics.css'
 
@@ -60,7 +59,6 @@ const Overview = memo(function Overview({ period, language, t, distanceUnits }: 
 
 const TransportChart = memo(function TransportChart({ period, language, t, distanceUnits }: DistancePeriodProps) {
   const [unit, setUnit] = useState<'distance' | 'time'>('distance')
-  const unitSwitch = useSlidingIndicator<HTMLDivElement>(unit)
   const locale = locales[language]
   const categories = [
     { category: 'flight', label: t.transportFlight, icon: 'plane' },
@@ -83,7 +81,7 @@ const TransportChart = memo(function TransportChart({ period, language, t, dista
   }
   return <article className="statistics-card statistics-transport">
     <CardHeading title={t.transport} subtitle={unit === 'distance' ? t.transportDistance : t.transportTime}>
-      <div ref={unitSwitch} className="statistics-switch sliding-indicator" role="group" aria-label={t.transportUnit}>
+      <div className="statistics-switch transport-unit-switch" role="group" aria-label={t.transportUnit}>
         <button type="button" aria-pressed={unit === 'distance'} onClick={() => setUnit('distance')}>{distanceUnit(distanceUnits)}</button>
         <button type="button" aria-pressed={unit === 'time'} onClick={() => setUnit('time')}>{t.transportHours}</button>
       </div>

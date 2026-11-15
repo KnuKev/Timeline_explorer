@@ -41,9 +41,9 @@
 .statistics-chart-unit { padding-top: 2px; color: var(--text-secondary); font-size: 12px; font-weight: 500; }
 .statistics-switch { display: flex; flex: 0 0 auto; padding: 3px; border-radius: 7px; background: var(--surface-muted); }
 .statistics-switch button { min-height: 27px; padding: 5px 9px; border: 0; border-radius: 5px; background: transparent; color: var(--text-secondary); font-size: 10px; font-weight: 500; white-space: nowrap; cursor: pointer; }
-.statistics-switch.sliding-indicator { --indicator-height: calc(100% - 6px); --indicator-radius: 5px; --indicator-surface: var(--surface-raised); }
+.statistics-switch.transport-unit-switch { position: relative; isolation: isolate; display: grid; grid-template-columns: repeat(2, 1fr); }
 .statistics-switch button[aria-pressed="true"] { color: var(--text); }
-.statistics-switch:not(.sliding-indicator) button[aria-pressed="true"] { background: var(--surface-raised); box-shadow: 0 1px 3px #00000012; }
+.statistics-switch:not(.transport-unit-switch) button[aria-pressed="true"] { background: var(--surface-raised); box-shadow: 0 1px 3px #00000012; }
 .statistics-note { margin: 13px 0 0; color: var(--text-tertiary); font-size: 10px; line-height: 1.6; }
 .statistics-empty-text { margin: 18px 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
 .statistics-empty.small { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 200px; padding: 22px; text-align: center; color: var(--text-secondary); }
@@ -139,7 +139,7 @@
 .statistics-transport-label { display: flex; align-items: center; gap: 11px; color: var(--text); font-size: 12px; font-weight: 500; }
 .statistics-transport-label .ui-icon { flex: 0 0 18px; width: 18px; height: 18px; color: var(--transport-color); }
 .statistics-transport-track { height: 12px; overflow: hidden; background: var(--surface-muted); border-radius: 4px; }
-.statistics-transport-track > span { display: block; height: 100%; border-radius: inherit; background: var(--transport-color); }
+.statistics-transport-track > span { display: block; height: 100%; border-radius: inherit; background: var(--transport-color); transition: width var(--motion-standard) var(--motion-ease); }
 .statistics-transport-value { display: flex; flex-direction: column; gap: 3px; text-align: right; font-variant-numeric: tabular-nums; }
 .statistics-transport-value strong { color: var(--text); font-size: 14px; font-weight: 500; }
 .transport-road { --transport-color: var(--heat-3); }

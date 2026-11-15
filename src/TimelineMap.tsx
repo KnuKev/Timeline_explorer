@@ -6,9 +6,10 @@ import { formatPointInterval } from './formatting'
 import type { TimelinePoint } from './timeline'
 import type { RouteSegment } from './routes'
 import { createPointSpatialIndex, createRouteGeometry, longitudeNear, projectLocation, shortestLongitudeRange, worldRectsForBounds } from './mapSpatial'
-import { MIN_MAP_ZOOM, POINTS_MIN_ZOOM, getMapColors, type MapBackground } from './mapAppearance'
+import { MIN_MAP_ZOOM, POINTS_MIN_ZOOM, getMapColors } from './mapAppearance'
 import Icon from './Icon'
 import MapLandCover from './MapLandCover'
+import { addSmoothWheelZoom } from './leafletWheelZoom'
 import { createHeatColorRamp, createHeatKernel, drawCityHeatmap, type HeatCell } from './cityHeatmap'
 
 type Props = {
@@ -19,13 +20,11 @@ type Props = {
   heatCells?: readonly HeatCell[]
   selectedPointId: string | null
   isDark: boolean
-  mapBackground: MapBackground
   language: Language
   onSelect: (id: string | null) => void
 }
 
 const WORLD_BOUNDS = L.latLngBounds([-85.05112878, -180], [85.05112878, 180])
-const ZOOM_SNAP = 0.25
 const mercator = L.Projection.SphericalMercator
 const extendedMercator = { ...mercator, MAX_LATITUDE: 89.99999 }
 const viewportCenters = new WeakSet<L.LatLng>()
@@ -46,10 +45,7 @@ const VIEWPORT_CRS = {
     },
   },
 }
-const EOX_WMTS = 'https://tiles.maps.eox.at/wmts/1.0.0'
 const OSM_CREDIT = '<a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
-const SATELLITE_CREDIT = '<a href="https://cloudless.eox.at">EOxCloudless</a> by <a href="https://eox.at">EOX IT Services GmbH</a> (Contains modified Copernicus Sentinel data 2016)'
-const EOX_LABEL_CREDIT = `© ${OSM_CREDIT} · <a href="https://maps.eox.at">EOX::Maps</a> / MapServer`
 
 function hasVisibleSize(map: L.Map): boolean {
   const container = map.getContainer()
@@ -126,7 +122,8 @@ const PointLayer = memo(function PointLayer({ index, isDark, active, pointsOnly,
   const map = useMap()
   useEffect(() => {
     if (!active) return
-    const canvas = L.DomUtil.create('canvas', heatCells ? 'timeline-point-canvas timeline-heat-canvas' : 'timeline-point-canvas')
+    const canvas = L.DomUtil.create('canvas', 'timeline-point-canvas leaflet-zoom-animated')
+    if (heatCells) canvas.classList.add('timeline-heat-canvas')
     const context = canvas.getContext('2d', { willReadFrequently: Boolean(heatCells) })
     const heatKernel = heatCells ? createHeatKernel() : undefined
     if (!context) return
@@ -137,8 +134,15 @@ const PointLayer = memo(function PointLayer({ index, isDark, active, pointsOnly,
     const colors = getMapColors(isDark)
     const minZoom = pointsOnly ? MIN_MAP_ZOOM : POINTS_MIN_ZOOM
     const radius = pointsOnly ? 3.6 : 2.2
+    let drawnAt: { zoom: number; anchor: L.LatLng } | undefined
     const draw = () => {
-      if (!hasVisibleSize(map) || map.getZoom() < minZoom) { canvas.style.visibility = 'hidden'; return }
+      const zoom = map.getZoom()
+      if (!hasVisibleSize(map) || zoom < minZoom) {
+        drawnAt = undefined
+        canvas.style.visibility = 'hidden'
+        return
+      }
+      drawnAt = { zoom, anchor: map.containerPointToLatLng([0, 0]) }
       const size = map.getSize()
       const ratio = heatCells ? .5 : window.devicePixelRatio || 1
       canvas.width = Math.round(size.x * ratio)
@@ -176,17 +180,28 @@ const PointLayer = memo(function PointLayer({ index, isDark, active, pointsOnly,
       }
       canvas.style.visibility = 'visible'
     }
-    const hide = () => { canvas.style.visibility = 'hidden' }
+    const zoomCanvas = (zoom: number, center?: L.LatLng) => {
+      canvas.style.visibility = !drawnAt || zoom < minZoom ? 'hidden' : 'visible'
+      if (!drawnAt || zoom < minZoom) return
+      const position = center
+        ? map.project(drawnAt.anchor, zoom).subtract(map.project(center, zoom)).add(map.getSize().divideBy(2)).add(map.containerPointToLayerPoint([0, 0]))
+        : map.latLngToLayerPoint(drawnAt.anchor)
+      L.DomUtil.setTransform(canvas, position, map.getZoomScale(zoom, drawnAt.zoom))
+    }
+    const onZoom = () => zoomCanvas(map.getZoom())
+    const onZoomAnimation = (event: L.ZoomAnimEvent) => zoomCanvas(event.zoom, event.center)
     let pending = 0
     const schedule = () => {
       if (pending) cancelAnimationFrame(pending)
       pending = requestAnimationFrame(() => { pending = 0; draw() })
     }
-    map.on('movestart zoomstart', hide)
+    map.on('zoom', onZoom)
+    map.on('zoomanim', onZoomAnimation)
     map.on('moveend zoomend resize', schedule)
     draw()
     return () => {
-      map.off('movestart zoomstart', hide)
+      map.off('zoom', onZoom)
+      map.off('zoomanim', onZoomAnimation)
       map.off('moveend zoomend resize', schedule)
       if (pending) cancelAnimationFrame(pending)
       canvas.remove()
@@ -252,10 +267,9 @@ function ViewportAndControls({ points, selectedPoint, language, active }: { poin
     const topLeft = L.point(padding.paddingTopLeft)
     const bottomRight = L.point(padding.paddingBottomRight)
     const available = map.getSize().subtract(topLeft).subtract(bottomRight)
-    const snap = L.Browser.any3d ? ZOOM_SNAP : 1
     // Web Mercator's world is a square of 256 pixels at zoom zero.
     const fitZoom = map.getScaleZoom(Math.max(1, Math.min(available.x, available.y)) / 256, 0)
-    const zoom = Math.max(MIN_MAP_ZOOM, Math.floor(fitZoom / snap) * snap)
+    const zoom = Math.max(MIN_MAP_ZOOM, L.Browser.any3d ? fitZoom : Math.floor(fitZoom))
     const center = map.unproject(map.project([0, map.getCenter().lng], zoom).add([0, (bottomRight.y - topLeft.y) / 2]), zoom)
     overview.current = { zoom, center }
     map.setMinZoom(zoom)
@@ -303,6 +317,7 @@ function ViewportAndControls({ points, selectedPoint, language, active }: { poin
     }
   }, [map])
   const t = translations[language]
+  useEffect(() => active ? addSmoothWheelZoom(map) : undefined, [map, active])
   useEffect(() => {
     map.on('zoomend', centerOverview)
     return () => { map.off('zoomend', centerOverview) }
@@ -319,11 +334,10 @@ function ViewportAndControls({ points, selectedPoint, language, active }: { poin
 }
 
 const MapContents = memo(function MapContents(props: Props) {
-  const { points, routeSegments, pointsOnly, heatCells, selectedPointId, isDark, mapBackground, language, onSelect, active = true } = props
-  const highContrast = isDark || mapBackground === 'satellite'
+  const { points, routeSegments, pointsOnly, heatCells, selectedPointId, isDark, language, onSelect, active = true } = props
   const index = useMemo(() => createPointSpatialIndex(points), [points])
   const selected = useMemo(() => points.find(point => point.id === selectedPointId) ?? null, [points, selectedPointId])
-  const colors = getMapColors(highContrast)
+  const colors = getMapColors(isDark)
   const t = translations[language]
   const locale = locales[language]
   const first = pointsOnly ? undefined : points[0]
@@ -339,8 +353,8 @@ const MapContents = memo(function MapContents(props: Props) {
   }, [active, map])
   return <>
     <ViewportAndControls points={points} selectedPoint={selected} language={language} active={active} />
-    {!pointsOnly && <RouteLayer segments={routeSegments} isDark={highContrast} active={active} />}
-    <PointLayer index={index} isDark={heatCells ? isDark : highContrast} active={active} pointsOnly={pointsOnly} heatCells={heatCells} />
+    {!pointsOnly && <RouteLayer segments={routeSegments} isDark={isDark} active={active} />}
+    <PointLayer index={index} isDark={isDark} active={active} pointsOnly={pointsOnly} heatCells={heatCells} />
     <PointSelection index={index} onSelect={onSelect} active={active} />
     <Pane name="timeline-markers" style={{ zIndex: 460 }}>
     {first && <CircleMarker center={[first.lat, longitudeNear(first.lng, centerLng)]} radius={7} pathOptions={{ color: colors.border, weight: 2, fillColor: colors.route, fillOpacity: 1 }}>
@@ -359,17 +373,9 @@ const MapContents = memo(function MapContents(props: Props) {
 const TimelineMap = memo(function TimelineMap(props: Props) {
   const first = props.points[0]
   return <MapContainer className="map-view" center={first ? [first.lat, first.lng] : [0, 0]} zoom={first ? 15 : 2}
-    crs={VIEWPORT_CRS} minZoom={MIN_MAP_ZOOM} maxZoom={18} zoomSnap={ZOOM_SNAP} zoomControl={false} trackResize={false} preferCanvas>
-    {props.mapBackground === 'satellite' ? <>
-      <TileLayer key="satellite" minZoom={MIN_MAP_ZOOM} minNativeZoom={0} maxNativeZoom={14}
-        attribution={SATELLITE_CREDIT} url={`${EOX_WMTS}/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg`} />
-      <TileLayer key="satellite-labels" minZoom={MIN_MAP_ZOOM} minNativeZoom={0} zIndex={2}
-        attribution={EOX_LABEL_CREDIT} url={`${EOX_WMTS}/overlay_bright_3857/default/g/{z}/{y}/{x}.png`} />
-    </> : <>
-      <TileLayer key="street" minZoom={MIN_MAP_ZOOM} minNativeZoom={0}
-        attribution={`© ${OSM_CREDIT}`} url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      <MapLandCover />
-    </>}
+    crs={VIEWPORT_CRS} minZoom={MIN_MAP_ZOOM} maxZoom={18} zoomSnap={0} scrollWheelZoom={false} zoomControl={false} trackResize={false} preferCanvas>
+    <TileLayer minZoom={MIN_MAP_ZOOM} minNativeZoom={0} attribution={`© ${OSM_CREDIT}`} url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
+    <MapLandCover />
     <MapContents {...props} />
   </MapContainer>
 })
