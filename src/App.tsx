@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { parseTimeline, type TimelinePoint } from './timeline'
 import { demoTimeline, demoStartDate, demoEndDate } from './demoTimeline'
-import { selectPlacesYear, type PlaceEntry } from './places'
+import { CITY_RADIUS_KM, selectPlacesYear, type PlaceEntry } from './places'
 import type { TimelineTrip } from './trips'
 import { demoHomeLocationStorageKey, getStoredHomeLocations, homeLocationStorageKey, type DatedHomeLocation, getStoredHomeRadius, homeRadiusForUnits, homeRadiusStorageKey, normalizeHomeRadius } from './tripSettings'
 import { getStoredLanguage, languageStorageKey, locales, pointLabel, translations, type Language } from './i18n'
@@ -12,6 +12,7 @@ import { useMobileLayout } from './useMobileLayout'
 import { useSlidingIndicator } from './useSlidingIndicator'
 import { usePlaces } from './usePlaces'
 import TimelineMap from './TimelineMap'
+import { buildCityHeatCells } from './cityHeatmap'
 import { getMapColors, getStoredMapBackground, mapBackgroundStorageKey } from './mapAppearance'
 import PointList from './PointList'
 import Icon from './Icon'
@@ -104,16 +105,25 @@ function App() {
     return selectPlacesYear(placeAnalysis, placeYear, new Set(points.map(point => point.id)))
   }, [dataset, placeAnalysis, placeYear, showSuspectPoints])
 
+  const scopedPlace = useMemo(() => {
+    if (!placeScope || !placeViewEnabled) return undefined
+    const places = placeScope.kind === 'country' ? selectedPlaces?.countries : selectedPlaces?.cities
+    return places?.find(place => place.key === placeScope.key)
+  }, [placeScope, placeViewEnabled, selectedPlaces])
+  const isCityView = !tripScope && placeViewEnabled && placeScope?.kind === 'city'
+  const [cityLayer, setCityLayer] = useState<'points' | 'heatmap'>('points')
+  const cityLayerSwitch = useSlidingIndicator<HTMLDivElement>(activeTab === 'map' && isCityView ? cityLayer : 'hidden')
   const mapPoints = useMemo(() => {
-    if (tripScope) return (tripScope.mapPointIds ?? tripScope.pointIds).map(id => pointsById.get(id)).filter((point): point is TimelinePoint => Boolean(point))
-    if (!placeScope || !placeViewEnabled) return visiblePoints
-    const scopedPlaces = placeScope.kind === 'country' ? selectedPlaces?.countries : selectedPlaces?.cities
-    const ids = scopedPlaces?.find(place => place.key === placeScope.key)?.pointIds ?? []
+    const ids = tripScope ? tripScope.mapPointIds ?? tripScope.pointIds : scopedPlace?.pointIds
+    if (!ids) return placeViewEnabled && placeScope ? [] : visiblePoints
     return ids.map(id => pointsById.get(id)).filter((point): point is TimelinePoint => Boolean(point))
-  }, [tripScope, selectedPlaces, placeScope, placeViewEnabled, pointsById, visiblePoints])
+  }, [tripScope, scopedPlace, placeScope, placeViewEnabled, pointsById, visiblePoints])
+  const showingCityHeat = isCityView && cityLayer === 'heatmap'
+  const heatCells = useMemo(() => showingCityHeat && scopedPlace ? buildCityHeatCells(mapPoints, scopedPlace.dates) : undefined,
+    [showingCityHeat, mapPoints, scopedPlace])
   const places = placeMode === 'countries' ? selectedPlaces?.countries ?? [] : selectedPlaces?.cities ?? []
-  const mainPlaces = places.filter((place) => place.pointCount >= 10)
-  const fewerPlaces = places.filter((place) => place.pointCount < 10)
+  const mainPlaces = placeMode === 'cities' ? places : places.filter(place => place.pointCount >= 10)
+  const fewerPlaces = placeMode === 'cities' ? [] : places.filter(place => place.pointCount < 10)
   const placeName = (place: PlaceEntry) => placeMode === 'countries' ? countryName(place.countryCode, place.name) : place.name
   const scopeName = placeScope?.kind === 'country' ? countryName(placeScope.countryCode, placeScope.name) : placeScope?.name ?? ''
   const tripName = tripScope?.destination.kind === 'country' ? countryName(tripScope.destination.countryCode, tripScope.destination.name) : tripScope?.destination.name ?? ''
@@ -142,7 +152,7 @@ function App() {
     </button>
   )
   const selectedPoint = useMemo(() => selectedPointId === null ? null : mapPoints.find(point => point.id === selectedPointId) ?? null, [mapPoints, selectedPointId])
-  const route = useMemo(() => buildRouteSegments(mapPoints, importedPoints), [mapPoints, importedPoints])
+  const route = useMemo(() => isCityView ? { segments: [], distanceKm: 0 } : buildRouteSegments(mapPoints, importedPoints), [isCityView, mapPoints, importedPoints])
   const hasFlights = useMemo(() => route.segments.some(segment => segment.transport === 'flight'), [route])
   const mapDistance = route.distanceKm
   const distanceLabel = formatDistance(mapDistance, locale, distanceUnits)
@@ -321,8 +331,8 @@ function App() {
           {placesLoading && <div className="places-message"><span className="places-spinner" /> {t.analysing}</div>}{placesError && <div className="places-message places-error" role="alert">{t[placesError]}<button type="button" className="primary-button" onClick={retryPlaces}>{t.retry}</button></div>}
           {!placesLoading && !placesError && places.length === 0 && <div className="places-empty"><Icon name="globe" /><strong>{placeYear === 'all' ? t.noPlaces : t.noPlacesForYear}</strong>{placeYear === 'all' && <><p>{t.importForPlaces}</p><button type="button" className="primary-button" onClick={() => { setSheetExpanded(true); setActiveTab('map') }}>{t.goToMap}</button></>}</div>}
           {!placesLoading && !placesError && mainPlaces.length > 0 && <div className="places-grid">{mainPlaces.map(renderPlaceCard)}</div>}
-          {!placesLoading && !placesError && fewerPlaces.length > 0 && <details key={placeMode} className="fewer-places"><summary><span>{placeMode === 'countries' ? t.fewerCountries : t.fewerPlaces}</span><span className="count-badge">{fewerPlaces.length.toLocaleString(locale)}</span></summary><p>{t.fewerPlacesHint}</p><div className="places-grid">{fewerPlaces.map((place, index) => renderPlaceCard(place, mainPlaces.length + index))}</div></details>}
-          <footer className="places-attribution"><span className="mobile-hide-copy">{t.citySuggestions} </span><a href="https://www.geonames.org/" target="_blank" rel="noreferrer">GeoNames</a> (CC BY 4.0)<span className="mobile-hide-copy"> · {t.geodataDetails.replace('{distance}', formatLargeDistance(30, locale, distanceUnits))}</span></footer>
+          {!placesLoading && !placesError && fewerPlaces.length > 0 && <details key={placeMode} className="fewer-places"><summary><span>{t.fewerCountries}</span><span className="count-badge">{fewerPlaces.length.toLocaleString(locale)}</span></summary><p>{t.fewerPlacesHint}</p><div className="places-grid">{fewerPlaces.map((place, index) => renderPlaceCard(place, mainPlaces.length + index))}</div></details>}
+          <footer className="places-attribution"><span className="mobile-hide-copy">{t.citySuggestions} </span><a href="https://www.geonames.org/" target="_blank" rel="noreferrer">GeoNames</a> (CC BY 4.0)<span className="mobile-hide-copy"> · {t.geodataDetails.replace('{distance}', formatLargeDistance(CITY_RADIUS_KM, locale, distanceUnits))}</span></footer>
         </div>
       )}
       {tripsRequested && <div className="trips-workspace" hidden={activeTab !== 'trips'}>
@@ -433,8 +443,13 @@ function App() {
                   <strong>{mapPoints.length.toLocaleString(locale)}</strong>
                 </div>
                 <div className="summary-card">
-                  <span className="summary-metric-label"><Icon name="route" />{t.estimatedRoute}</span>
-                  <strong className={'summary-distance' + (distanceValue.length > 9 ? ' compact' : '')} title={distanceLabel}>{distanceValue}<small> {distanceUnit}</small></strong>
+                  {isCityView ? <>
+                    <span className="summary-metric-label"><Icon name="calendar" />{t.daysWithStays}</span>
+                    <strong>{(scopedPlace?.days ?? 0).toLocaleString(locale)}</strong>
+                  </> : <>
+                    <span className="summary-metric-label"><Icon name="route" />{t.estimatedRoute}</span>
+                    <strong className={'summary-distance' + (distanceValue.length > 9 ? ' compact' : '')} title={distanceLabel}>{distanceValue}<small> {distanceUnit}</small></strong>
+                  </>}
                 </div>
               </div>
             </section>
@@ -455,16 +470,23 @@ function App() {
         </aside>
 
         <section className="map-area" data-background={mapBackground} aria-label={t.mapLabel}>
-          <TimelineMap mapBackground={mapBackground} points={mapPoints} routeSegments={route.segments} selectedPointId={selectedPointId} isDark={isDark} language={language} onSelect={setSelectedPointId} active={activeTab === 'map'} />
+          <TimelineMap mapBackground={mapBackground} points={mapPoints} routeSegments={route.segments} pointsOnly={isCityView} heatCells={heatCells} selectedPointId={selectedPointId} isDark={isDark} language={language} onSelect={setSelectedPointId} active={activeTab === 'map'} />
 
-          <div className="map-bottom-overlay">
+          {isCityView ? <div className="map-bottom-overlay city-map-overlay">
+            <div ref={cityLayerSwitch} className="report-switch sliding-indicator city-layer-switch" role="group" aria-label={t.cityMapLayer}>
+              <button type="button" aria-pressed={cityLayer === 'points'} onClick={() => setCityLayer('points')}>{t.cityMapPoints}</button>
+              <button type="button" aria-pressed={cityLayer === 'heatmap'} onClick={() => setCityLayer('heatmap')}>{t.cityHeatmap}</button>
+            </div>
+            {showingCityHeat && <div className="map-legend city-heat-legend" role="img" aria-label={t.cityHeatScale}>
+              <span>{t.cityHeatFewerDays}</span><span className="city-heat-gradient" /><span>{t.cityHeatMoreDays}</span>
+            </div>}
+          </div> : <div className="map-bottom-overlay">
             <div className="map-legend">
               <span className="legend-item"><span className="legend-line" style={{ background: mapColors.route }} />{t.route}</span>
               {hasFlights && <span className="legend-item" title={t.flightRouteHint}><span className="legend-line flight" style={{ borderColor: mapColors.route }} />{t.flightRoute}</span>}
               <span className="legend-item" title={t.zoomHint}><span className="legend-dot" style={{ background: mapColors.point }} />{t.positionPoint}</span>
             </div>
-
-          </div>
+          </div>}
 
           {selectedPoint && (
             <div className="selected-card">

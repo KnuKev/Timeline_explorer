@@ -7,8 +7,6 @@ let cities = rows.flatMap((line) => {
   if (!Number.isFinite(population) || population < 2_500) return []
   return [{ name: fields[1], lat: Number(fields[4]), lng: Number(fields[5]), countryCode: fields[8] }]
 })
-// Stabekk is a well-known populated locality, but GeoNames only lists its railway-station feature.
-cities.push({ name: 'Stabekk', lat: 59.90841, lng: 10.60781, countryCode: 'NO' })
 const countryCodes = JSON.parse(await readFile('public/country-codes.json', 'utf8'))
 // --trips-only preserves the existing Places reference table when adding finer
 // settlement context to Trips. A normal rebuild regenerates both tables.

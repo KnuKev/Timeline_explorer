@@ -55,8 +55,8 @@ Automatically detects completed domestic and international trips with at least t
 
 ### Places & Location Ranks
 
-Rank and explore visited countries, regions, and cities sorted by total days spent. Filter or click any location tile to highlight recorded movements in that specific area.
-![Places view showing visited countries and cities ranked by days spent](docs/images/places.png)
+Countries are ranked by days with recorded locations. Cities count once per local calendar day with a recorded stay or at least three GPS observations within 500 m of the first fix, spanning at least 20 minutes with no gap longer than 30 minutes. Select a city to see the points behind its stays on the map.
+![Places view showing country and city rankings by day](docs/images/places.png)
 
 ### Travel Statistics - Total Stats, Monthly Overview, Activity Calendar and Transport Stats
 

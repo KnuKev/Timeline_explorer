@@ -63,7 +63,8 @@ test('country days include recorded visit duration, deduplicate overlaps, and do
   assert.equal(spain.pointCount, 3)
   assert.ok(spain.dates.includes('2025-01-19'))
   assert.ok(!spain.dates.includes('2025-01-20'))
-  assert.equal(result.cities[0]?.days, 16)
+  assert.equal(result.cities[0]?.days, 15)
+  assert.deepEqual(result.cities[0]?.pointIds, ['visit'])
   assert.equal(result.countries.find(country => country.countryCode === 'AT')?.days, 1)
 })
 
@@ -96,11 +97,47 @@ test('a Places year keeps only its recorded days and points, including visits th
   const ids = new Set(selectTimelineRange(dataset, '2025-01-01', '2025-12-31').map(point => point.id))
   const year = selectPlacesYear(all, '2025', ids)
   assert.deepEqual(year.countries.map(place => place.countryCode), ['ES'])
-  for (const place of [year.countries[0]!, year.cities[0]!]) {
-    assert.deepEqual(place.dates, ['2025-01-02', '2025-01-01'])
-    assert.deepEqual(place.pointIds, ['visit', 'new-fix'])
-    assert.equal(place.days, 2)
-    assert.equal(place.pointCount, 2)
-  }
+  assert.deepEqual(year.countries[0]?.dates, ['2025-01-02', '2025-01-01'])
+  assert.deepEqual(year.countries[0]?.pointIds, ['visit', 'new-fix'])
+  assert.deepEqual(year.cities[0]?.dates, ['2025-01-02', '2025-01-01'])
+  assert.deepEqual(year.cities[0]?.pointIds, ['visit'])
+  assert.equal(year.cities[0]?.days, 2)
+  assert.equal(year.cities[0]?.pointCount, 1)
   assert.equal(all.countries.find(place => place.countryCode === 'ES')?.pointCount, 3)
+})
+
+test('Cities add GPS stays in mixed history and count every visited city once per local day', () => {
+  const points = [
+    point('fix1', 28.4636, -16.2518, '2024-12-31T23:45:00Z'),
+    point('fix2', 28.4637, -16.2518, '2024-12-31T23:55:00Z'),
+    point('fix3', 28.4636, -16.2519, '2025-01-01T00:05:00Z'),
+    { ...point('santa-visit', 28.4636, -16.2518, '2025-01-01T09:00:00Z'), kind: 'visit' as const, endTimestamp: '2025-01-01T11:00:00Z' },
+    { ...point('laguna-visit', 28.4874, -16.3159, '2025-01-01T12:00:00Z'), kind: 'visit' as const, endTimestamp: '2025-01-01T13:00:00Z' },
+  ]
+  const cities = [
+    { name: 'Santa Cruz', lat: 28.4636, lng: -16.2518, countryCode: 'ES' },
+    { name: 'La Laguna', lat: 28.4874, lng: -16.3159, countryCode: 'ES' },
+  ]
+  const all = analysePlaces(points, cities, codes, countries)
+  const santaCruz = all.cities.find(city => city.name === 'Santa Cruz')
+  assert.deepEqual(santaCruz?.dates, ['2025-01-01', '2024-12-31'])
+  assert.deepEqual(santaCruz?.pointIds, ['fix1', 'fix2', 'fix3', 'santa-visit'])
+  assert.equal(all.cities.find(city => city.name === 'La Laguna')?.days, 1)
+  const year = selectPlacesYear(all, '2024', new Set(['fix1', 'fix2']))
+  assert.deepEqual(year.cities.map(city => [city.name, city.days, city.pointIds]), [['Santa Cruz', 1, ['fix1', 'fix2']]])
+})
+
+test('Cities exclude passing fixes, activity endpoints, and nearby fixes separated by long gaps', () => {
+  const points = [
+    point('passing1', 28.4636, -16.2518, '2025-01-01T10:00:00Z'),
+    point('passing2', 28.4690, -16.2518, '2025-01-01T10:10:00Z'),
+    point('passing3', 28.4744, -16.2518, '2025-01-01T10:20:00Z'),
+    { ...point('endpoint', 28.4636, -16.2518, '2025-01-02T12:00:00Z'), source: 'activity' as const },
+    point('fix1', 28.4636, -16.2518, '2025-01-02T12:10:00Z'),
+    point('fix2', 28.4636, -16.2518, '2025-01-02T12:20:00Z'),
+    point('fix3', 28.4636, -16.2518, '2025-01-02T16:00:00Z'),
+  ]
+  const result = analysePlaces(points, [{ name: 'Santa Cruz', lat: 28.4636, lng: -16.2518, countryCode: 'ES' }], codes, countries)
+  assert.deepEqual(result.cities, [])
+  assert.equal(result.countries[0]?.days, 2)
 })

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { analysePlaces, type CityReference, type CountryFeature } from '../src/places.ts'
+import { analysePlaces, createObservedCityLookup, type CityReference, type CountryFeature } from '../src/places.ts'
 import { pointDateKeys } from '../src/pointDates.ts'
 import { distanceKm, type TimelinePoint } from '../src/timeline.ts'
 
@@ -16,8 +16,7 @@ test('city index matches exhaustive spherical nearest-neighbour search', () => {
     const near = cities[i]!
     return point(`point-${i}`, near.lat + random() * 0.6 - 0.3, ((near.lng + random() * 0.6 - 0.3 + 540) % 360) - 180)
   })
-  const result = analysePlaces(points, cities, codes, world)
-  const actual = new Map(result.cities.flatMap(city => city.pointIds.map(id => [id, city.name] as const)))
+  const lookup = createObservedCityLookup(cities, codes, world)
   for (const observation of points) {
     let expected: CityReference | undefined
     let shortest = 30
@@ -25,7 +24,7 @@ test('city index matches exhaustive spherical nearest-neighbour search', () => {
       const distance = distanceKm([observation, point('city', city.lat, city.lng)])
       if (distance < shortest) { shortest = distance; expected = city }
     }
-    assert.equal(actual.get(observation.id), expected?.name, observation.id)
+    assert.equal(lookup(observation)?.name, expected?.name, observation.id)
   }
 })
 
@@ -36,8 +35,9 @@ test('nearest cities handle the dateline, polar locations, radius limits and cou
     { name: 'Outside radius', lat: 10, lng: 10.3, countryCode: 'AT' },
     { name: 'Wrong country', lat: 20, lng: 20, countryCode: 'SI' },
   ]
-  const result = analysePlaces([point('date', 0, 179.95), point('polar', 89.99, -179), point('far', 10, 10), point('foreign', 20, 20)], cities, codes, world)
-  assert.deepEqual(result.cities.map(city => city.name).sort(), ['Across dateline', 'Across pole'])
+  const lookup = createObservedCityLookup(cities, codes, world)
+  const observations = [point('date', 0, 179.95), point('polar', 89.99, -179), point('far', 10, 10), point('foreign', 20, 20)]
+  assert.deepEqual(observations.map(value => lookup(value)?.name), ['Across dateline', 'Across pole', undefined, undefined])
 })
 
 test('identical city coordinates retain reference ordering and caches do not retain old point coordinates', () => {
@@ -47,11 +47,11 @@ test('identical city coordinates retain reference ordering and caches do not ret
     { name: 'Moved', lat: 20, lng: 20, countryCode: 'AT' },
   ]
   const observation = point('reused', 0, 0)
-  assert.equal(analysePlaces([observation], cities, codes, world).cities[0]?.name, 'First')
+  const lookup = createObservedCityLookup(cities, codes, world)
+  assert.equal(lookup(observation)?.name, 'First')
   observation.lat = 20
   observation.lng = 20
-  assert.equal(analysePlaces([observation], cities, codes, world).cities[0]?.name, 'Moved')
-  assert.equal(analysePlaces([observation], cities, codes, world).cities[0]?.pointCount, 1)
+  assert.equal(lookup(observation)?.name, 'Moved')
 })
 
 test('date caching respects changed timestamps and safely rejects absurd visit intervals', () => {

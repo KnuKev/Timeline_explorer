@@ -1,7 +1,7 @@
 import { feature } from 'topojson-client'
 import worldAtlas from 'world-atlas/countries-10m.json'
 import type { Topology } from 'topojson-specification'
-import { analysePlaces, countryCodeAt, type CountryFeature, type CityReference, type PlaceAnalysis } from './places'
+import { analysePlaces, countryCodeAt, createObservedCityLookup, type CountryFeature, type CityReference, type PlaceAnalysis } from './places'
 import type { TimelinePoint } from './timeline'
 import type { IndexedDay } from './timelineIndex'
 import { buildStatistics, type StatisticsAnalysis } from './statistics'
@@ -87,7 +87,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
           ...home,
           countryCode: countryCodeAt({ ...home, id: '', label: '', timestamp: '', kind: 'visit' }, ...refs, countries),
         }))
-        trips = buildTrips(message.includeSuspect ? current.points : current.cleanPoints, current.points, data, resolveTripLocality, { homeRadiusKm, homes })
+        trips = buildTrips(message.includeSuspect ? current.points : current.cleanPoints, current.points, data, resolveTripLocality, { homeRadiusKm, homes, resolveCity: createObservedCityLookup(...refs, countries) })
         if (current.trips.size >= 6) current.trips.delete(current.trips.keys().next().value!)
         current.trips.set(cacheKey, trips)
       }

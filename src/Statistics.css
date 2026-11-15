@@ -5,14 +5,7 @@
   scroll-padding-top: var(--report-toolbar-clearance);
   background: var(--background);
   color: var(--text);
-  --heat-0: #e8f0fb;
-  --heat-1: #cbdefa;
-  --heat-2: #97bef4;
-  --heat-3: #5899ed;
-  --heat-4: #2576de;
-  --heat-5: #134d9e;
 }
-.dark .statistics-page { --heat-0: #273346; --heat-1: #244773; --heat-2: #2863a7; --heat-3: #3886d8; --heat-4: #6baaf0; --heat-5: #b1d3ff; }
 .statistics-container { max-width: 1280px; margin: 0 auto; }
 .statistics-heading { margin-bottom: 24px; }
 .statistics-heading h1 { gap: 13px; margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -1px; }

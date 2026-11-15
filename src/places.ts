@@ -13,7 +13,10 @@ type CityCandidate = Pick<CityNode, 'city' | 'position' | 'index'>
 
 const displayNames = new Intl.DisplayNames(['no'], { type: 'region' })
 const EARTH_RADIUS_KM = 6371
-const CITY_RADIUS_KM = 30
+export const CITY_RADIUS_KM = 30
+const MIN_CITY_STAY_MS = 20 * 60_000
+const MAX_CITY_STAY_GAP_MS = 30 * 60_000
+const CITY_STAY_RADIUS_KM = 0.5
 const cityIndexes = new WeakMap<CityReference[], Map<string, CityNode>>()
 const matchers = new WeakMap<CityReference[], WeakMap<CountryFeature[], WeakMap<Record<string, string>, (point: TimelinePoint) => PlaceMatch | undefined>>>()
 
@@ -139,6 +142,11 @@ function getMatcher(cities: CityReference[], countryCodes: Record<string, string
   return match
 }
 
+export function createObservedCityLookup(cities: CityReference[], countryCodes: Record<string, string>, countryFeatures: CountryFeature[]) {
+  const match = getMatcher(cities, countryCodes, countryFeatures)
+  return (point: TimelinePoint) => match(point)?.city
+}
+
 export function countryCodeAt(point: TimelinePoint, cities: CityReference[], countryCodes: Record<string, string>, countryFeatures: CountryFeature[]) {
   return getMatcher(cities, countryCodes, countryFeatures)(point)?.country.countryCode
 }
@@ -156,13 +164,44 @@ export function analysePlaces(points: TimelinePoint[], cities: CityReference[], 
     for (const day of dates) aggregate.days.add(day)
     aggregates.set(identity.key, aggregate)
   }
+  const datesFor = (point: TimelinePoint) => datesByPoint?.get(point) ?? pointDateKeys(point)
+  // Recorded stays and older GPS samples can coexist in a merged file.
+  let candidate: {
+    city: PlaceIdentity
+    samples: TimelinePoint[]
+    start: number
+    last: number
+  } | undefined
+  const finishStay = () => {
+    if (candidate && candidate.samples.length >= 3 && candidate.last - candidate.start >= MIN_CITY_STAY_MS) {
+      for (const point of candidate.samples) append(cityAggregates, candidate.city, point, datesFor(point))
+    }
+    candidate = undefined
+  }
   for (const point of points) {
     const places = match(point)
-    if (!places) continue
-    const dates = datesByPoint?.get(point) ?? pointDateKeys(point)
-    append(countryAggregates, places.country, point, dates)
-    if (places.city) append(cityAggregates, places.city, point, dates)
+    const dates = datesFor(point)
+    if (places) append(countryAggregates, places.country, point, dates)
+
+    const city = places?.city
+    const time = Date.parse(point.timestamp)
+    if (!city || !dates.length || point.kind === 'visit' || point.source === 'activity' || !Number.isFinite(time)) {
+      finishStay()
+      if (city && dates.length && point.kind === 'visit') append(cityAggregates, city, point, dates)
+      continue
+    }
+
+    const anchor = candidate?.samples[0]
+    // Compare every sample to the first fix so a slow journey cannot drift into a stay.
+    if (candidate && (candidate.city !== city || time < candidate.last || time - candidate.last > MAX_CITY_STAY_GAP_MS
+      || (anchor && kilometersBetween(anchor.lat, anchor.lng, point.lat, point.lng) > CITY_STAY_RADIUS_KM))) finishStay()
+    if (!candidate) candidate = { city, samples: [point], start: time, last: time }
+    else if (time > candidate.last) {
+      candidate.samples.push(point)
+      candidate.last = time
+    }
   }
+  finishStay()
   const entries = (aggregates: Map<string, Aggregate>): PlaceEntry[] => Array.from(aggregates.values(), ({ identity, ids, days }) => ({
     key: identity.key, name: identity.name, countryCode: identity.countryCode,
     ...(identity.countryName === undefined ? {} : { countryName: identity.countryName }),

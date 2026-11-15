@@ -10,7 +10,7 @@ export type TripLocalityResolver = (point: Pick<TimelinePoint, 'lat' | 'lng'>, c
 export type TimelineTrip = { id: string; destination: TripDestination; category: 'destination' | 'roadtrip' | 'multi-stop'; scope: 'domestic' | 'international' | 'unknown'; hasFlight: boolean; homeKey?: string; homeCountryCode?: string; countryCodes: string[]; startTimestamp: string; endTimestamp: string; startDate: string; endDate: string; nights: number; distanceKm: number; places: TripDestination[]; pointIds: string[]; mapPointIds?: string[] }
 export type TripDestinationGroup = { destination: TripDestination; trips: TimelineTrip[]; totalNights: number; totalDistanceKm: number; lastStartDate: string }
 export type TripHome = { key: string; name?: string; countryCode?: string; startDate: string; lat: number; lng: number; recordedNights: number; explicit: boolean }
-export type TripOptions = { homeRadiusKm?: number; homes?: readonly (DatedHomeLocation & { countryCode?: string })[] }
+export type TripOptions = { homeRadiusKm?: number; homes?: readonly (DatedHomeLocation & { countryCode?: string })[]; resolveCity?: (point: TimelinePoint) => Pick<PlaceEntry, 'key' | 'name' | 'countryCode'> | undefined }
 export type TripsAnalysis = { homeStatus: 'detected' | 'missing'; homeCount: number; homeRadiusKm: number; homes: TripHome[]; trips: TimelineTrip[]; groups: TripDestinationGroup[] }
 
 const HOUR = 3_600_000
@@ -328,14 +328,18 @@ export function buildTrips(points: TimelinePoint[], allPoints: TimelinePoint[], 
   if (!profiles.length) return empty(homeRadiusKm)
   const cityForPoint = new Map<string, PlaceEntry>()
   const countryForPoint = new Map<string, PlaceEntry>()
-  for (const city of places.cities) for (const id of city.pointIds) cityForPoint.set(id, city)
+  if (!options.resolveCity) for (const city of places.cities) for (const id of city.pointIds) cityForPoint.set(id, city)
   for (const country of places.countries) for (const id of country.pointIds) countryForPoint.set(id, country)
-  const countryAt = (point: TimelinePoint) => countryForPoint.get(point.id)?.countryCode ?? cityForPoint.get(point.id)?.countryCode
+  const resolveCity = options.resolveCity
+  const cityAt = resolveCity
+    ? (point: TimelinePoint) => countryForPoint.has(point.id) ? resolveCity(point) : undefined
+    : (point: TimelinePoint) => cityForPoint.get(point.id)
+  const countryAt = (point: TimelinePoint) => countryForPoint.get(point.id)?.countryCode ?? cityAt(point)?.countryCode
   const homes: TripHome[] = profiles.map(home => {
     const point = home.cluster.point
     const countryCode = home.manual ? home.manual.countryCode : countryAt(point)
     const local = resolveLocality?.(point, countryCode)
-    return { key: `home:${point.lat.toFixed(5)}:${point.lng.toFixed(5)}`, name: local?.name ?? cityForPoint.get(point.id)?.name, countryCode: home.manual ? countryCode : countryCode ?? local?.countryCode,
+    return { key: `home:${point.lat.toFixed(5)}:${point.lng.toFixed(5)}`, name: local?.name ?? cityAt(point)?.name, countryCode: home.manual ? countryCode : countryCode ?? local?.countryCode,
       startDate: calendar.local(home.at === -Infinity ? Date.parse(first!.timestamp) : home.at, home.zone).date, lat: point.lat, lng: point.lng, recordedNights: home.recordedNights, explicit: home.explicit }
   })
   const homeCountry = new Map(profiles.map((home, index) => [home, homes[index]!.countryCode]))
@@ -354,7 +358,7 @@ export function buildTrips(points: TimelinePoint[], allPoints: TimelinePoint[], 
     const cluster = stayIndex.find(point)
     if (cluster.destination) return cluster.destination
     const anchor = cluster.point
-    const city = cityForPoint.get(anchor.id) ?? cityForPoint.get(point.id)
+    const city = cityAt(anchor) ?? cityAt(point)
     const country = countryForPoint.get(anchor.id) ?? countryForPoint.get(point.id)
     const countryCode = country?.countryCode ?? city?.countryCode
     const local = resolveLocality?.(anchor, countryCode)
@@ -365,7 +369,7 @@ export function buildTrips(points: TimelinePoint[], allPoints: TimelinePoint[], 
   }
   const cityDestinations = new Map<string, TripDestination>()
   const internationalDestinationAt = (point: TimelinePoint): TripDestination => {
-    const city = cityForPoint.get(point.id)
+    const city = cityAt(point)
     const country = countryForPoint.get(point.id)
     const code = country?.countryCode ?? city?.countryCode
     const key = city ? `city:${city.key}` : code ? `country:${code}` : undefined

@@ -9,11 +9,14 @@ import { createPointSpatialIndex, createRouteGeometry, longitudeNear, projectLoc
 import { MIN_MAP_ZOOM, POINTS_MIN_ZOOM, getMapColors, type MapBackground } from './mapAppearance'
 import Icon from './Icon'
 import MapLandCover from './MapLandCover'
+import { createHeatColorRamp, createHeatKernel, drawCityHeatmap, type HeatCell } from './cityHeatmap'
 
 type Props = {
   active?: boolean
   points: TimelinePoint[]
   routeSegments: RouteSegment[]
+  pointsOnly?: boolean
+  heatCells?: readonly HeatCell[]
   selectedPointId: string | null
   isDark: boolean
   mapBackground: MapBackground
@@ -119,21 +122,25 @@ const RouteLayer = memo(function RouteLayer({ segments, isDark, active }: { segm
 })
 
 type PointIndex = ReturnType<typeof createPointSpatialIndex>
-const PointLayer = memo(function PointLayer({ index, isDark, active }: { index: PointIndex; isDark: boolean; active: boolean }) {
+const PointLayer = memo(function PointLayer({ index, isDark, active, pointsOnly, heatCells }: { index: PointIndex; isDark: boolean; active: boolean; pointsOnly?: boolean; heatCells?: readonly HeatCell[] }) {
   const map = useMap()
   useEffect(() => {
     if (!active) return
-    const canvas = L.DomUtil.create('canvas', 'timeline-point-canvas')
-    const context = canvas.getContext('2d')
+    const canvas = L.DomUtil.create('canvas', heatCells ? 'timeline-point-canvas timeline-heat-canvas' : 'timeline-point-canvas')
+    const context = canvas.getContext('2d', { willReadFrequently: Boolean(heatCells) })
+    const heatKernel = heatCells ? createHeatKernel() : undefined
     if (!context) return
     const pane = map.getPane('timeline-points') ?? map.createPane('timeline-points')
     pane.style.zIndex = '450'
     pane.appendChild(canvas)
+    const heatColors = heatCells ? createHeatColorRamp(canvas) : undefined
     const colors = getMapColors(isDark)
+    const minZoom = pointsOnly ? MIN_MAP_ZOOM : POINTS_MIN_ZOOM
+    const radius = pointsOnly ? 3.6 : 2.2
     const draw = () => {
-      if (!hasVisibleSize(map) || map.getZoom() < POINTS_MIN_ZOOM) { canvas.style.visibility = 'hidden'; return }
+      if (!hasVisibleSize(map) || map.getZoom() < minZoom) { canvas.style.visibility = 'hidden'; return }
       const size = map.getSize()
-      const ratio = window.devicePixelRatio || 1
+      const ratio = heatCells ? .5 : window.devicePixelRatio || 1
       canvas.width = Math.round(size.x * ratio)
       canvas.height = Math.round(size.y * ratio)
       canvas.style.width = `${size.x}px`
@@ -141,19 +148,32 @@ const PointLayer = memo(function PointLayer({ index, isDark, active }: { index: 
       L.DomUtil.setPosition(canvas, map.containerPointToLayerPoint([0, 0]))
       context.setTransform(ratio, 0, 0, ratio, 0, 0)
       context.clearRect(0, 0, size.x, size.y)
-      const markers = index.sample(visibleWorldRects(map), 5 / map.options.crs!.scale(map.getZoom()))
+      const centerLng = map.getCenter().lng
+      if (heatCells && heatKernel && heatColors) {
+        drawCityHeatmap(context, heatKernel, heatColors, heatCells, size, cell => map.latLngToContainerPoint([cell.lat, longitudeNear(cell.lng, centerLng)]))
+        canvas.style.visibility = 'visible'
+        return
+      }
+      const bounds = visibleWorldRects(map)
+      const markers = pointsOnly ? bounds.flatMap(index.query) : index.sample(bounds, 5 / map.options.crs!.scale(map.getZoom()))
       context.fillStyle = colors.point
       context.strokeStyle = colors.border
       context.lineWidth = 1
+      context.globalAlpha = pointsOnly ? .68 : 1
       context.beginPath()
-      const centerLng = map.getCenter().lng
       for (const point of markers) {
         const pixel = map.latLngToContainerPoint([point.lat, longitudeNear(point.lng, centerLng)])
-        context.moveTo(pixel.x + 2.2, pixel.y)
-        context.arc(pixel.x, pixel.y, 2.2, 0, Math.PI * 2)
+        context.moveTo(pixel.x + radius, pixel.y)
+        context.arc(pixel.x, pixel.y, radius, 0, Math.PI * 2)
+        if (pointsOnly) {
+          context.fill()
+          context.beginPath()
+        }
       }
-      context.fill()
-      context.stroke()
+      if (!pointsOnly) {
+        context.fill()
+        context.stroke()
+      }
       canvas.style.visibility = 'visible'
     }
     const hide = () => { canvas.style.visibility = 'hidden' }
@@ -171,7 +191,7 @@ const PointLayer = memo(function PointLayer({ index, isDark, active }: { index: 
       if (pending) cancelAnimationFrame(pending)
       canvas.remove()
     }
-  }, [map, index, isDark, active])
+  }, [map, index, isDark, active, pointsOnly, heatCells])
   return null
 })
 
@@ -299,15 +319,15 @@ function ViewportAndControls({ points, selectedPoint, language, active }: { poin
 }
 
 const MapContents = memo(function MapContents(props: Props) {
-  const { points, routeSegments, selectedPointId, isDark, mapBackground, language, onSelect, active = true } = props
+  const { points, routeSegments, pointsOnly, heatCells, selectedPointId, isDark, mapBackground, language, onSelect, active = true } = props
   const highContrast = isDark || mapBackground === 'satellite'
   const index = useMemo(() => createPointSpatialIndex(points), [points])
   const selected = useMemo(() => points.find(point => point.id === selectedPointId) ?? null, [points, selectedPointId])
   const colors = getMapColors(highContrast)
   const t = translations[language]
   const locale = locales[language]
-  const first = points[0]
-  const last = points.length > 1 ? points[points.length - 1] : undefined
+  const first = pointsOnly ? undefined : points[0]
+  const last = !pointsOnly && points.length > 1 ? points[points.length - 1] : undefined
   const map = useMap()
   const [centerLng, setCenterLng] = useState(() => map.getCenter().lng)
   useEffect(() => {
@@ -319,8 +339,8 @@ const MapContents = memo(function MapContents(props: Props) {
   }, [active, map])
   return <>
     <ViewportAndControls points={points} selectedPoint={selected} language={language} active={active} />
-    <RouteLayer segments={routeSegments} isDark={highContrast} active={active} />
-    <PointLayer index={index} isDark={highContrast} active={active} />
+    {!pointsOnly && <RouteLayer segments={routeSegments} isDark={highContrast} active={active} />}
+    <PointLayer index={index} isDark={heatCells ? isDark : highContrast} active={active} pointsOnly={pointsOnly} heatCells={heatCells} />
     <PointSelection index={index} onSelect={onSelect} active={active} />
     <Pane name="timeline-markers" style={{ zIndex: 460 }}>
     {first && <CircleMarker center={[first.lat, longitudeNear(first.lng, centerLng)]} radius={7} pathOptions={{ color: colors.border, weight: 2, fillColor: colors.route, fillOpacity: 1 }}>
