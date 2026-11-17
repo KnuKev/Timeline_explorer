@@ -7,7 +7,7 @@ import worldAtlas from 'world-atlas/countries-110m.json' with { type: 'json' }
 import type { TimelinePoint } from './timeline'
 import type { RouteSegment } from './routes'
 import { globeCountries, globePoints, globeRoutes } from './globeGeometry'
-import { shortestLongitudeRange } from './mapSpatial'
+import { createPointSpatialIndex, shortestLongitudeRange, worldRectsForBounds } from './mapSpatial'
 import { getMapColors, POINTS_MIN_ZOOM } from './mapAppearance'
 import { translations, type Language } from './i18n'
 import Icon from './Icon'
@@ -84,7 +84,7 @@ export default function TimelineGlobe({ active, points, routeSegments, selectedP
   const [map, setMap] = useState<GlobeMap | null>(null)
   const t = translations[language]
   const routes = useMemo(() => globeRoutes(routeSegments), [routeSegments])
-  const observations = useMemo(() => globePoints(points), [points])
+  const observationIndex = useMemo(() => createPointSpatialIndex(points), [points])
   const bounds = useMemo(() => selectionBounds(points), [points])
 
   useEffect(() => {
@@ -169,7 +169,38 @@ export default function TimelineGlobe({ active, points, routeSegments, selectedP
   }, [map, active, points, fit])
 
   useEffect(() => { map?.getSource<GeoJSONSource>('routes')?.setData(routes) }, [map, routes])
-  useEffect(() => { map?.getSource<GeoJSONSource>('observations')?.setData(observations) }, [map, observations])
+  useEffect(() => {
+    if (!map || !active) return
+    const source = map.getSource<GeoJSONSource>('observations')
+    if (!source) return
+    let hasObservations = true
+    const update = () => {
+      const zoom = map.getZoom()
+      if (zoom < GLOBE_POINTS_MIN_ZOOM) {
+        if (hasObservations) source.setData(empty)
+        hasObservations = false
+        return
+      }
+      const view = map.getBounds()
+      const west = view.getWest()
+      const east = view.getEast() < west ? view.getEast() + 360 : view.getEast()
+      const padLng = (east - west) * .1
+      const padLat = (view.getNorth() - view.getSouth()) * .1
+      const rects = worldRectsForBounds({
+        west: west - padLng,
+        east: east + padLng,
+        north: view.getNorth() + padLat,
+        south: view.getSouth() - padLat,
+      })
+      const visible = observationIndex.sample(rects, 5 / (512 * 2 ** zoom))
+      source.setData(globePoints(visible))
+      hasObservations = visible.length > 0
+    }
+    // Refresh after camera motion to avoid rebuilding the GeoJSON on every frame.
+    map.on('moveend', update)
+    update()
+    return () => { map.off('moveend', update) }
+  }, [map, active, observationIndex])
   useEffect(() => {
     map?.getSource<GeoJSONSource>('selected')?.setData(selectedPoint ? globePoints([selectedPoint]) : empty)
     if (selectedPoint && active) map?.jumpTo({ center: [selectedPoint.lng, selectedPoint.lat] })

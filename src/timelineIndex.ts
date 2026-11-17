@@ -51,7 +51,11 @@ export function groupTimelineSelection(dataset: TimelineDataset, selection: Time
   for (let index = from ? lowerBound(dataset.days, from) : 0; index < dataset.days.length; index++) {
     const entry = dataset.days[index]!
     if (to && entry.day > to) break
-    const points = Array.from(entry.indices).filter(index => ids.has(dataset.points[index]!.id)).map(index => dataset.points[index]!)
+    const points: TimelinePoint[] = []
+    for (const pointIndex of entry.indices) {
+      const point = dataset.points[pointIndex]!
+      if (ids.has(point.id)) points.push(point)
+    }
     if (points.length) groups.push({ day: entry.day, points })
   }
   return groups

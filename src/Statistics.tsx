@@ -263,7 +263,7 @@ function Calendar({ period, year, years, language, t, distanceUnits, onOpenRange
       ['unknown', t.noData], ['0', `0 ${unit}`], ['1', `<${limits[0]}`],
       ...limits.slice(1).map((limit, index) => [String(index + 2), `${limits[index]}–${limit}`]), ['5', `${limits.at(-1)}+ ${unit}`],
     ].map(([value, label]) => <span key={value}><i className={`level-${value}`} />{label}</span>)}</div></div>
-    {calendar.longest && calendar.longest.distance! > 0 && <button type="button" className="statistics-longest" onClick={() => onOpenRange(calendar.longest!.date, calendar.longest!.date)}><span>{t.longestDay} <strong>{formatPlaceDate(calendar.longest.date, locale)}</strong></span><strong>{formatDistance(calendar.longest.distance!, locale)} <Icon name="arrow" /></strong></button>}
+    {calendar.longest && calendar.longest.distance! > 0 && <button type="button" className="statistics-longest" onClick={() => onOpenRange(calendar.longest!.date, calendar.longest!.date)}><span>{t.longestDay} <strong>{formatPlaceDate(calendar.longest.date, locale)}</strong></span><strong>{formatDistance(calendar.longest.distance!, locale, distanceUnits)} <Icon name="arrow" /></strong></button>}
     <p className="statistics-note">{t.calendarHint}</p>
   </article>
 }

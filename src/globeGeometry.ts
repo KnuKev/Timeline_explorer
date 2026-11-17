@@ -83,13 +83,14 @@ export function globeRoutes(segments: readonly RouteSegment[]): FeatureCollectio
 }
 
 export function globePoints(points: readonly TimelinePoint[]): FeatureCollection<Point> {
-  const features: Feature<Point>[] = []
-  const step = Math.max(1, Math.ceil(points.length / 12_000))
-  points.forEach((point, index) => {
-    if (index % step && index !== points.length - 1) return
-    features.push({ type: 'Feature', properties: { id: point.id }, geometry: { type: 'Point', coordinates: [point.lng, point.lat] } })
-  })
-  return { type: 'FeatureCollection', features }
+  return {
+    type: 'FeatureCollection',
+    features: points.map(point => ({
+      type: 'Feature',
+      properties: { id: point.id },
+      geometry: { type: 'Point', coordinates: [point.lng, point.lat] },
+    })),
+  }
 }
 
 function clipRing(ring: Position[], seam: number, direction: number): Position[] {

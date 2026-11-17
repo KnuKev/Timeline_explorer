@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { globeCountries, globePoints, globeRoutes } from '../src/globeGeometry.ts'
+import { createPointSpatialIndex, worldRectsForBounds } from '../src/mapSpatial.ts'
 import type { TimelinePoint } from '../src/timeline.ts'
 
 function point(id: string, lng: number, lat: number): TimelinePoint {
@@ -28,12 +29,13 @@ test('an LA to Tokyo flight takes the North Pacific arc and stays split at the d
   assert.deepEqual(coordinates.at(-1), [139.78, 35.55])
 })
 
-test('points on the globe retain original selection IDs, including the last observation', () => {
-  const points = Array.from({ length: 24_001 }, (_, index) => point(String(index), 10, 30))
-  const data = globePoints(points)
-  assert(data.features.length <= 12_001)
-  assert.equal(data.features[0]?.properties?.id, '0')
-  assert.equal(data.features.at(-1)?.properties?.id, '24000')
+test('globe viewport sampling retains local observation IDs across the date line', () => {
+  const distant = Array.from({ length: 24_001 }, (_, index) => point(String(index), 10, 30))
+  const points = [...distant, point('west', 179.99, 40), point('east', -179.99, 40)]
+  const index = createPointSpatialIndex(points)
+  const rects = worldRectsForBounds({ west: 179.9, east: 180.1, north: 40.1, south: 39.9 })
+  const data = globePoints(index.sample(rects, 5 / (512 * 2 ** 12)))
+  assert.deepEqual(data.features.map(feature => feature.properties?.id).sort(), ['east', 'west'])
 })
 
 test('land crossing the dateline is split into closed polygons along the seam', () => {

@@ -210,19 +210,22 @@ const PointLayer = memo(function PointLayer({ index, isDark, active, pointsOnly,
   return null
 })
 
-const PointSelection = memo(function PointSelection({ index, onSelect, active }: { index: PointIndex; onSelect: Props['onSelect']; active: boolean }) {
+const PointSelection = memo(function PointSelection({ index, onSelect, active, pointsOnly }: { index: PointIndex; onSelect: Props['onSelect']; active: boolean; pointsOnly?: boolean }) {
   const map = useMap()
   useEffect(() => {
     if (!active) return
     const select = (event: L.LeafletMouseEvent) => {
-      if (Math.abs(event.latlng.lat) > WORLD_BOUNDS.getNorth()) { onSelect(null); return }
+      if ((!pointsOnly && map.getZoom() < POINTS_MIN_ZOOM) || Math.abs(event.latlng.lat) > WORLD_BOUNDS.getNorth()) {
+        onSelect(null)
+        return
+      }
       const position = projectLocation(event.latlng.lat, event.latlng.lng)
       const nearest = index.nearest(position, 12 / map.options.crs!.scale(map.getZoom()))
       onSelect(nearest?.id ?? null)
     }
     map.on('click', select)
     return () => { map.off('click', select) }
-  }, [map, index, onSelect, active])
+  }, [map, index, onSelect, active, pointsOnly])
   return null
 })
 
@@ -355,7 +358,7 @@ const MapContents = memo(function MapContents(props: Props) {
     <ViewportAndControls points={points} selectedPoint={selected} language={language} active={active} />
     {!pointsOnly && <RouteLayer segments={routeSegments} isDark={isDark} active={active} />}
     <PointLayer index={index} isDark={isDark} active={active} pointsOnly={pointsOnly} heatCells={heatCells} />
-    <PointSelection index={index} onSelect={onSelect} active={active} />
+    <PointSelection index={index} onSelect={onSelect} active={active} pointsOnly={pointsOnly} />
     <Pane name="timeline-markers" style={{ zIndex: 460 }}>
     {first && <CircleMarker center={[first.lat, longitudeNear(first.lng, centerLng)]} radius={7} pathOptions={{ color: colors.border, weight: 2, fillColor: colors.route, fillOpacity: 1 }}>
       <Popup><strong>{t.startPoint}</strong><br />{formatPointInterval(first, locale, true)}</Popup>

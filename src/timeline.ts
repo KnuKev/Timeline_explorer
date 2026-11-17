@@ -311,7 +311,7 @@ export function distanceKm(points: TimelinePoint[]): number {
     const a =
       Math.sin(dLat / 2) ** 2 +
       Math.cos(radians(previous.lat)) * Math.cos(radians(current.lat)) * Math.sin(dLng / 2) ** 2
-    meters += 6_371_000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    meters += 6_371_000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)))
   }
   return meters / 1000
 }

@@ -4,6 +4,7 @@ import { distanceKm } from './timeline.ts'
 import { buildRouteSegments } from './routes.ts'
 import type { PlaceAnalysis, PlaceEntry } from './places.ts'
 import { normalizeHomeRadius, type DatedHomeLocation } from './tripSettings.ts'
+import { createLocalClock } from './localClock.ts'
 
 export type TripDestination = { key: string; name: string; countryCode?: string; kind: 'city' | 'country' | 'place' | 'itinerary'; locality?: string; region?: string; lat?: number; lng?: number }
 export type TripLocalityResolver = (point: Pick<TimelinePoint, 'lat' | 'lng'>, countryCode?: string) => { name: string; countryCode?: string; region?: string; distanceKm?: number } | undefined
@@ -32,7 +33,7 @@ function homeLabel(point: TimelinePoint): boolean {
 
 /** All calendar operations are local to the recorded location, never the host. */
 function calendarTools() {
-  const formats = new Map<string, Intl.DateTimeFormat>()
+  const local = createLocalClock()
   const zones = new Map<string, string>()
   const zoneAt = (point: TimelinePoint) => {
     const key = `${point.lat}:${point.lng}`
@@ -43,16 +44,6 @@ function calendarTools() {
       zones.set(key, zone)
     }
     return zone
-  }
-  const local = (time: number, zone: string) => {
-    let formatter = formats.get(zone)
-    if (!formatter) {
-      formatter = new Intl.DateTimeFormat('sv-SE', { timeZone: zone, calendar: 'iso8601', numberingSystem: 'latn', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
-      formats.set(zone, formatter)
-    }
-    const parts: Record<string, string> = {}
-    for (const part of formatter.formatToParts(time)) if (part.type !== 'literal') parts[part.type] = part.value
-    return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour), minute: Number(parts.minute), second: Number(parts.second) }
   }
   const localInstant = (date: string, zone: string, hour = 4) => {
     const desired = Date.parse(date) + hour * HOUR
@@ -638,5 +629,5 @@ export function buildTrips(points: TimelinePoint[], allPoints: TimelinePoint[], 
     group.totalDistanceKm += trip.distanceKm
     groups.set(trip.destination.key, group)
   }
-  return { homeStatus: 'detected', homeCount: new Set(profiles.map(profile => profile.cluster.id)).size, homeRadiusKm, homes, trips, groups: [...groups.values()] }
+  return { homeStatus: 'detected', homeCount: new Set(homes.map(home => home.key)).size, homeRadiusKm, homes, trips, groups: [...groups.values()] }
 }

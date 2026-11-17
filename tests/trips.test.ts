@@ -76,6 +76,7 @@ test('dated home locations switch at local midnight and preserve automatically d
   ] })
 
   assert.deepEqual(result.trips.map(trip => trip.pointIds[0]), ['summer-0', 'spring-0', 'home-out'])
+  assert.equal(result.homeCount, 3)
   assert.deepEqual(result.homes.map(home => home.startDate), ['2025-03-06', '2025-04-01', '2025-07-01'])
 })
 

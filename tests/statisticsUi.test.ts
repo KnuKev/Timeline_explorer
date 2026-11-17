@@ -33,6 +33,13 @@ test('statistics calendar includes leap day and distinguishes missing records fr
   assert.doesNotMatch(html, /NaN|Infinity/)
 })
 
+test('the longest day uses the selected distance units', () => {
+  const html = renderToStaticMarkup(createElement(Statistics, {
+    data: fixture(), loading: false, language: 'en', distanceUnits: 'imperial', onRetry() {}, onOpenRange() {},
+  }))
+  assert.match(html, /statistics-longest[^>]*>[\s\S]*?<strong>186\.4 mi /)
+})
+
 test('statistics exposes the real hourly peak and bounded lists in both languages', () => {
   const english = render()
   assert.match(english, /MOST ACTIVE: 17–18/)

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { parseTimeline } from '../src/timeline.ts'
+import { distanceKm, parseTimeline } from '../src/timeline.ts'
 
 test('keeps iOS geo paths and computes offsets before chronological sorting', () => {
   const points = parseTimeline([
@@ -158,4 +158,10 @@ test('preserves the selected transport activity, including legacy zero probabili
   assert.equal(points[1].activities?.[0], points[0].activities?.[0])
   assert.equal(points[2].activities?.[0]?.mode, 'ferry')
   assert.equal(points[3].activities?.[0]?.mode, 'ferry')
+})
+
+test('distance between antipodes stays finite despite floating-point rounding', () => {
+  const a = { id: 'a', kind: 'path' as const, label: '', timestamp: '', lat: -85.5000000000002, lng: -179 }
+  const b = { ...a, id: 'b', lat: -a.lat, lng: 1 }
+  assert.ok(Math.abs(distanceKm([a, b]) - Math.PI * 6371) < .001)
 })

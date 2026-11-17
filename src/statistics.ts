@@ -3,6 +3,7 @@ import { distanceKm, type TimelinePoint } from './timeline.ts'
 import { buildRouteSegments } from './routes.ts'
 import { buildTransportStatistics, type TransportTotal } from './transportStatistics.ts'
 import { pointDateKeys } from './pointDates.ts'
+import { createLocalClock } from './localClock.ts'
 import type { IndexedDay } from './timelineIndex.ts'
 import type { PlaceAnalysis, PlaceEntry } from './places.ts'
 
@@ -83,7 +84,7 @@ export function buildStatistics(points: TimelinePoint[], allPoints: TimelinePoin
   }
   const localDate = (point: TimelinePoint): string | undefined => pointDates.get(point) ?? pointDateKeys(point)[0]
 
-  const clockFormatters = new Map<string, Intl.DateTimeFormat>()
+  const localClock = createLocalClock()
   const zoneByCoordinate = new Map<string, string>()
   const zoneAt = (point: TimelinePoint) => {
     const key = `${point.lat}:${point.lng}`
@@ -96,15 +97,9 @@ export function buildStatistics(points: TimelinePoint[], allPoints: TimelinePoin
     return zone
   }
   const clockAt = (time: number, zone: string) => {
-    let formatter = clockFormatters.get(zone)
-    if (!formatter) {
-      formatter = new Intl.DateTimeFormat('sv-SE', { timeZone: zone, calendar: 'iso8601', numberingSystem: 'latn', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
-      clockFormatters.set(zone, formatter)
-    }
-    const fields: Record<string, string> = {}
-    for (const part of formatter.formatToParts(time)) if (part.type !== 'literal') fields[part.type] = part.value
-    return { date: `${fields.year}-${fields.month}-${fields.day}`, hour: Number(fields.hour),
-      remaining: HOUR_MS - (Number(fields.minute) * MINUTE_MS + Number(fields.second) * 1000 + ((time % 1000) + 1000) % 1000) }
+    const local = localClock(time, zone)
+    return { date: local.date, hour: local.hour,
+      remaining: HOUR_MS - (local.minute * MINUTE_MS + local.second * 1000 + ((time % 1000) + 1000) % 1000) }
   }
   const addMovement = (start: number, end: number, point: TimelinePoint) => {
     const zone = zoneAt(point)

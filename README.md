@@ -11,7 +11,7 @@ A Google Maps Timeline viewer for exploring your Google Location History on an i
 1. Open [Timeline Explorer](https://knukev.github.io/Timeline_explorer/) and try the fictional London–Paris–Amsterdam–Oslo–London journey. No installation or account is needed.
 2. To explore your own history, open **Map → Choose file** and select a Google Timeline JSON export. Mobile Timeline exports and older Takeout files such as `Records.json` are supported. Unzip archived exports first.
 
-Your file stays in browser memory and is never uploaded to GitHub. Refreshing the page clears it. The selected map provider (OpenStreetMap or EOX) receives tile requests for the area you view.
+Your file stays in browser memory and is never uploaded to GitHub. Refreshing the page clears it. The flat map requests tiles from OpenStreetMap for the area you view. The globe uses Natural Earth data bundled with the app.
 
 ## Explore your history
 
