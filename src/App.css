@@ -662,3 +662,32 @@
   }
   .app-shell :is(.nav-item, .toolbar-button, .date-nav button, .map-zoom-controls button):active > .ui-icon { scale: 1; }
 }
+
+.places-filters { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.places-country { min-height: 0; min-width: 0; max-width: 100%; }
+.places-country select { max-width: min(100%, 14rem); }
+.places-search { display: flex; align-items: center; min-width: 0; gap: 0; transition: gap .22s ease; }
+.places-search[data-open="true"] { gap: 6px; }
+.places-search .toolbar-button { flex: 0 0 auto; }
+.places-search input {
+  box-sizing: border-box;
+  width: 0;
+  min-width: 0;
+  height: 39px;
+  padding: 0;
+  border: 0 solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  opacity: 0;
+  transition: width .22s ease, opacity .16s ease;
+}
+.places-search[data-open="true"] input { width: min(10rem, 45vw); opacity: 1; padding: 0 9px; border-width: 1px; }
+@media (max-width: 680px) {
+  .places-filters { flex: 1 1 auto; }
+  .places-search input { height: var(--report-control-height); font-size: 16px; }
+  .places-search .toolbar-button { width: var(--report-control-height); height: var(--report-control-height); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .places-search, .places-search input { transition: none; }
+}

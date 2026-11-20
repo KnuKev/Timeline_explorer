@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { analysePlaces, createObservedCityLookup, type CityReference, type CountryFeature } from '../src/places.ts'
+import { analysePlaces, CITY_RADIUS_KM, createObservedCityLookup, type CityReference, type CountryFeature } from '../src/places.ts'
 import { pointDateKeys } from '../src/pointDates.ts'
 import { distanceKm, type TimelinePoint } from '../src/timeline.ts'
 
@@ -19,7 +19,7 @@ test('city index matches exhaustive spherical nearest-neighbour search', () => {
   const lookup = createObservedCityLookup(cities, codes, world)
   for (const observation of points) {
     let expected: CityReference | undefined
-    let shortest = 30
+    let shortest = CITY_RADIUS_KM
     for (const city of cities) {
       const distance = distanceKm([observation, point('city', city.lat, city.lng)])
       if (distance < shortest) { shortest = distance; expected = city }
@@ -30,13 +30,13 @@ test('city index matches exhaustive spherical nearest-neighbour search', () => {
 
 test('nearest cities handle the dateline, polar locations, radius limits and country codes', () => {
   const cities: CityReference[] = [
-    { name: 'Across dateline', lat: 0, lng: -179.95, countryCode: 'AT' },
+    { name: 'Across dateline', lat: 0, lng: -179.99, countryCode: 'AT' },
     { name: 'Across pole', lat: 89.99, lng: 179, countryCode: 'AT' },
     { name: 'Outside radius', lat: 10, lng: 10.3, countryCode: 'AT' },
     { name: 'Wrong country', lat: 20, lng: 20, countryCode: 'SI' },
   ]
   const lookup = createObservedCityLookup(cities, codes, world)
-  const observations = [point('date', 0, 179.95), point('polar', 89.99, -179), point('far', 10, 10), point('foreign', 20, 20)]
+  const observations = [point('date', 0, 179.99), point('polar', 89.99, -179), point('far', 10, 10), point('foreign', 20, 20)]
   assert.deepEqual(observations.map(value => lookup(value)?.name), ['Across dateline', 'Across pole', undefined, undefined])
 })
 

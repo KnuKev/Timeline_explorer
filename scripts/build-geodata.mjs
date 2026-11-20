@@ -3,6 +3,8 @@ import { readFile, readdir, writeFile } from 'node:fs/promises'
 const rows = (await readFile('.cache/geonames/cities1000.txt', 'utf8')).trim().split(/\r?\n/)
 let cities = rows.flatMap((line) => {
   const fields = line.split('\t')
+  // Neighbourhoods and municipal arrondissements would otherwise count alongside their parent city.
+  if (fields[7] === 'PPLX' || (fields[8] === 'FR' && /^(Paris|Lyon|Marseille) (?:0?[1-9]|[12]\d)(?:e?\b|er\b)/.test(fields[1]))) return []
   const population = Number(fields[14])
   if (!Number.isFinite(population) || population < 2_500) return []
   return [{ name: fields[1], lat: Number(fields[4]), lng: Number(fields[5]), countryCode: fields[8] }]

@@ -9,7 +9,6 @@ const CELL_DEGREES = 5
 const LATITUDE_BAND_DEGREES = 0.25
 const COAST_TOLERANCE_KM = 2
 const MAX_COORDINATE_CACHE_SIZE = 8_192
-const cellKey = (lat: number, lng: number) => `${Math.floor(lat / CELL_DEGREES)}:${Math.floor(lng / CELL_DEGREES)}`
 
 function indexRing(points: Ring): IndexedRing {
   const bands = new Map<number, number[]>()
@@ -65,7 +64,8 @@ function boundaryDistanceKm(lat: number, lng: number, ring: IndexedRing, maximum
 
 // Index each island separately: an overseas island must not enlarge the mainland's
 // search box. Exact land matches always win over the small coastal GPS tolerance.
-export function createCountryLookup(features: CountryFeature[]) {
+export function createCountryLookup(features: CountryFeature[], cellDegrees = CELL_DEGREES, coastToleranceKm = COAST_TOLERANCE_KM) {
+  const cellKey = (lat: number, lng: number) => `${Math.floor(lat / cellDegrees)}:${Math.floor(lng / cellDegrees)}`
   const grid = new Map<string, IndexedPolygon[]>()
   const cache = new Map<string, CountryFeature | undefined>()
   const cacheKeys: string[] = []
@@ -90,8 +90,8 @@ export function createCountryLookup(features: CountryFeature[]) {
         bounds.south = Math.min(bounds.south, lat)
         bounds.north = Math.max(bounds.north, lat)
       }
-      for (let y = Math.floor(bounds.south / CELL_DEGREES); y <= Math.floor(bounds.north / CELL_DEGREES); y++) {
-        for (let x = Math.floor(bounds.west / CELL_DEGREES); x <= Math.floor(bounds.east / CELL_DEGREES); x++) {
+      for (let y = Math.floor(bounds.south / cellDegrees); y <= Math.floor(bounds.north / cellDegrees); y++) {
+        for (let x = Math.floor(bounds.west / cellDegrees); x <= Math.floor(bounds.east / cellDegrees); x++) {
           const key = `${y}:${x}`
           const cell = grid.get(key) ?? []
           cell.push(bounds)
@@ -114,17 +114,22 @@ export function createCountryLookup(features: CountryFeature[]) {
       }
     }
 
+    if (!coastToleranceKm) {
+      remember(key, undefined)
+      return undefined
+    }
+
     // Simplified shorelines and GPS drift can place a coastal point just offshore.
     // Do not assign open water or override a point already inside another country.
-    const latitudePadding = COAST_TOLERANCE_KM / 111.195
+    const latitudePadding = coastToleranceKm / 111.195
     const longitudePadding = Math.min(180, latitudePadding / Math.max(0.001, Math.cos(lat * Math.PI / 180)))
     const nearby = new Set<IndexedPolygon>()
-    for (let y = Math.floor((lat - latitudePadding) / CELL_DEGREES); y <= Math.floor((lat + latitudePadding) / CELL_DEGREES); y++) {
-      for (let x = Math.floor((lng - longitudePadding) / CELL_DEGREES); x <= Math.floor((lng + longitudePadding) / CELL_DEGREES); x++) {
+    for (let y = Math.floor((lat - latitudePadding) / cellDegrees); y <= Math.floor((lat + latitudePadding) / cellDegrees); y++) {
+      for (let x = Math.floor((lng - longitudePadding) / cellDegrees); x <= Math.floor((lng + longitudePadding) / cellDegrees); x++) {
         for (const polygon of grid.get(`${y}:${x}`) ?? []) nearby.add(polygon)
       }
     }
-    let best = COAST_TOLERANCE_KM
+    let best = coastToleranceKm
     let country: CountryFeature | undefined
     for (const polygon of nearby) {
       if (lng < polygon.west - longitudePadding || lng > polygon.east + longitudePadding || lat < polygon.south - latitudePadding || lat > polygon.north + latitudePadding) continue

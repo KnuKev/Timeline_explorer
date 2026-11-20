@@ -1,7 +1,8 @@
 import type { ReactNode, SVGProps } from 'react'
 
-type IconName = 'map' | 'route' | 'globe' | 'chart' | 'calendar' | 'upload' | 'shield' | 'check' | 'pin' | 'sun' | 'moon' | 'close' | 'left' | 'right' | 'down' | 'plus' | 'minus' | 'fit' | 'arrow' | 'merge' | 'plane' | 'car' | 'train' | 'question' | 'settings' | 'download'
+type IconName = 'map' | 'route' | 'globe' | 'chart' | 'calendar' | 'upload' | 'shield' | 'check' | 'pin' | 'sun' | 'moon' | 'close' | 'left' | 'right' | 'down' | 'plus' | 'minus' | 'fit' | 'arrow' | 'merge' | 'plane' | 'car' | 'train' | 'question' | 'settings' | 'download' | 'search'
 const paths: Record<IconName, ReactNode> = {
+  search: <><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 4.5 4.5" /></>,
   map: <><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2Z" /><path d="M9 3v16M15 5v16" /></>,
   route: <><circle cx="6" cy="5" r="2" /><circle cx="18" cy="19" r="2" /><path d="M8 5h7a4 4 0 0 1 0 8H9a3 3 0 0 0 0 6h7" /></>,
   globe: <><circle cx="12" cy="12" r="9" /><ellipse cx="12" cy="12" rx="4" ry="9" /><path d="M3 12h18" /></>,
