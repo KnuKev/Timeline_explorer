@@ -137,7 +137,7 @@ const AreaBoundary = memo(function AreaBoundary({ boundary, isDark, active }: {
     const layer = L.geoJSON({ ...boundary, type: 'Feature' } as GeoJsonObject, {
       interactive: false,
       coordsToLatLng: coords => L.latLng(coords[1]!, longitudeNear(coords[0]!, map.getCenter().lng)),
-      style: { renderer, color, weight: 2.5, opacity: .95, fillColor: color, fillOpacity: isDark ? .14 : .10 },
+      style: { renderer, color: isDark ? '#94a3b8' : '#64748b', weight: 1, opacity: .85, fillColor: color, fillOpacity: isDark ? .14 : .10 },
     }).addTo(map)
     const refresh = () => {
       layer.clearLayers()
