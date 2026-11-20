@@ -4,7 +4,7 @@ import { createCountryLookup } from './geography.ts'
 
 type CityReference = { name: string; lat: number; lng: number; countryCode: string }
 export type CountryFeature = { id?: string | number; properties?: { name?: string }; geometry: { type: string; coordinates: unknown } }
-type PlaceEntry = { key: string; name: string; countryName?: string; countryCode?: string; days: number; dates: string[]; pointCount: number; pointIds: string[] }
+type PlaceEntry = { boundary?: CountryFeature; key: string; name: string; countryName?: string; countryCode?: string; days: number; dates: string[]; pointCount: number; pointIds: string[] }
 type PlaceAnalysis = { countries: PlaceEntry[]; cities: PlaceEntry[] }
 type PlaceIdentity = { key: string; name: string; countryCode?: string; countryName?: string }
 type PlaceMatch = { country: PlaceIdentity; city?: PlaceIdentity }

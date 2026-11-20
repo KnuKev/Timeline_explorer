@@ -1,6 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CircleMarker, MapContainer, Pane, Popup, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
+import type { GeoJsonObject } from 'geojson'
+import type { CountryFeature } from './places'
 import { type Language, locales, pointLabel, translations } from './i18n'
 import { formatPointInterval } from './formatting'
 import type { TimelinePoint } from './timeline'
@@ -13,6 +15,7 @@ import { addSmoothWheelZoom } from './leafletWheelZoom'
 import { createHeatColorRamp, createHeatKernel, drawCityHeatmap, type HeatCell } from './cityHeatmap'
 
 type Props = {
+  boundary?: CountryFeature
   active?: boolean
   points: TimelinePoint[]
   routeSegments: RouteSegment[]
@@ -117,8 +120,41 @@ const RouteLayer = memo(function RouteLayer({ segments, isDark, active }: { segm
   return null
 })
 
+// Keep the translucent area below routes, points and markers.
+const AreaBoundary = memo(function AreaBoundary({ boundary, isDark, active }: {
+  boundary?: CountryFeature; isDark: boolean; active: boolean
+}) {
+  const map = useMap()
+  useEffect(() => {
+    if (!boundary || !active) return
+    const pane = map.getPane('area-boundary') ?? map.createPane('area-boundary')
+    pane.style.zIndex = '380'
+    pane.style.pointerEvents = 'none'
+    const renderer = L.svg({ pane: 'area-boundary', padding: .5 })
+    renderer.addTo(map)
+    const color = isDark ? '#69a8ff' : '#0869e8'
+    const layer = L.geoJSON({ ...boundary, type: 'Feature' } as GeoJsonObject, {
+      interactive: false,
+      coordsToLatLng: coords => L.latLng(coords[1]!, longitudeNear(coords[0]!, map.getCenter().lng)),
+      style: { renderer, color, weight: 2.5, opacity: .95, fillColor: color, fillOpacity: isDark ? .14 : .10 },
+    }).addTo(map)
+    const refresh = () => {
+      layer.clearLayers()
+      layer.addData({ ...boundary, type: 'Feature' } as GeoJsonObject)
+    }
+    refresh()
+    map.on('moveend resize', refresh)
+    return () => {
+      map.off('moveend resize', refresh)
+      layer.remove()
+      renderer.remove()
+    }
+  }, [map, boundary, isDark, active])
+  return null
+})
+
 type PointIndex = ReturnType<typeof createPointSpatialIndex>
-const PointLayer = memo(function PointLayer({ index, isDark, active, pointsOnly, heatCells }: { index: PointIndex; isDark: boolean; active: boolean; pointsOnly?: boolean; heatCells?: readonly HeatCell[] }) {
+const PointLayer = memo(function PointLayer({ index, isDark, active, pointsOnly, heatCells, accentPoints }: { index: PointIndex; isDark: boolean; active: boolean; pointsOnly?: boolean; heatCells?: readonly HeatCell[]; accentPoints?: boolean }) {
   const map = useMap()
   useEffect(() => {
     if (!active) return
@@ -160,10 +196,10 @@ const PointLayer = memo(function PointLayer({ index, isDark, active, pointsOnly,
       }
       const bounds = visibleWorldRects(map)
       const markers = pointsOnly ? bounds.flatMap(index.query) : index.sample(bounds, 5 / map.options.crs!.scale(map.getZoom()))
-      context.fillStyle = colors.point
+      context.fillStyle = accentPoints ? '#0869e8' : colors.point
       context.strokeStyle = colors.border
       context.lineWidth = 1
-      context.globalAlpha = pointsOnly ? .68 : 1
+      context.globalAlpha = accentPoints ? 1 : pointsOnly ? .68 : 1
       context.beginPath()
       for (const point of markers) {
         const pixel = map.latLngToContainerPoint([point.lat, longitudeNear(point.lng, centerLng)])
@@ -206,7 +242,7 @@ const PointLayer = memo(function PointLayer({ index, isDark, active, pointsOnly,
       if (pending) cancelAnimationFrame(pending)
       canvas.remove()
     }
-  }, [map, index, isDark, active, pointsOnly, heatCells])
+  }, [map, index, isDark, active, pointsOnly, heatCells, accentPoints])
   return null
 })
 
@@ -229,20 +265,27 @@ const PointSelection = memo(function PointSelection({ index, onSelect, active, p
   return null
 })
 
-function ViewportAndControls({ points, selectedPoint, language, active }: { points: TimelinePoint[]; selectedPoint: TimelinePoint | null; language: Language; active: boolean }) {
+function ViewportAndControls({ points, selectedPoint, language, active, boundary }: { points: TimelinePoint[]; selectedPoint: TimelinePoint | null; language: Language; active: boolean; boundary?: CountryFeature }) {
   const map = useMap()
   const controls = useRef<HTMLDivElement>(null)
   const displayedPoints = useRef<TimelinePoint[] | null>(null)
+  const displayedBoundary = useRef<CountryFeature | undefined>(undefined)
   const focusedPoint = useRef<TimelinePoint | null>(null)
   const overview = useRef<{ zoom: number; center: L.LatLng } | null>(null)
   const synchronizeRef = useRef<() => void>(() => {})
   const bounds = useMemo(() => {
+    if (boundary) {
+      const center = points[0]?.lng ?? 0
+      return L.geoJSON({ ...boundary, type: 'Feature' } as GeoJsonObject, {
+        coordsToLatLng: coords => L.latLng(coords[1]!, longitudeNear(coords[0]!, center)),
+      }).getBounds()
+    }
     if (!points.length) return null
     const result = L.latLngBounds([])
     for (const point of points) result.extend([point.lat, point.lng])
     const [west, east] = shortestLongitudeRange(points, result.getWest(), result.getEast())
     return L.latLngBounds([result.getSouth(), west], [result.getNorth(), east])
-  }, [points])
+  }, [points, boundary])
   const fit = useCallback(() => {
     if (!active || !hasVisibleSize(map) || !bounds) return
     const midpoint = bounds.getCenter().lng
@@ -276,9 +319,10 @@ function ViewportAndControls({ points, selectedPoint, language, active }: { poin
     const center = map.unproject(map.project([0, map.getCenter().lng], zoom).add([0, (bottomRight.y - topLeft.y) / 2]), zoom)
     overview.current = { zoom, center }
     map.setMinZoom(zoom)
-    if (displayedPoints.current !== points) {
+    if (displayedPoints.current !== points || displayedBoundary.current !== boundary) {
       fit()
       displayedPoints.current = points
+      displayedBoundary.current = boundary
     } else if (wasAtOverview) {
       if (map.getZoom() !== zoom) map.setView(center, zoom, { animate: false })
       else centerOverview()
@@ -296,7 +340,7 @@ function ViewportAndControls({ points, selectedPoint, language, active }: { poin
       const target = left.add(right).divideBy(2)
       map.panBy(position.subtract(target), { animate: false })
     }
-  }, [active, map, points, fit, selectedPoint, centerOverview])
+  }, [active, map, points, fit, selectedPoint, centerOverview, boundary])
   useEffect(() => {
     synchronizeRef.current = synchronize
     synchronize()
@@ -337,7 +381,7 @@ function ViewportAndControls({ points, selectedPoint, language, active }: { poin
 }
 
 const MapContents = memo(function MapContents(props: Props) {
-  const { points, routeSegments, pointsOnly, heatCells, selectedPointId, isDark, language, onSelect, active = true } = props
+  const { points, routeSegments, pointsOnly, heatCells, selectedPointId, isDark, language, onSelect, boundary, active = true } = props
   const index = useMemo(() => createPointSpatialIndex(points), [points])
   const selected = useMemo(() => points.find(point => point.id === selectedPointId) ?? null, [points, selectedPointId])
   const colors = getMapColors(isDark)
@@ -355,9 +399,10 @@ const MapContents = memo(function MapContents(props: Props) {
     return () => { map.off('moveend', update) }
   }, [active, map])
   return <>
-    <ViewportAndControls points={points} selectedPoint={selected} language={language} active={active} />
+    <ViewportAndControls points={points} selectedPoint={selected} language={language} active={active} boundary={boundary} />
+    <AreaBoundary boundary={boundary} isDark={isDark} active={active} />
     {!pointsOnly && <RouteLayer segments={routeSegments} isDark={isDark} active={active} />}
-    <PointLayer index={index} isDark={isDark} active={active} pointsOnly={pointsOnly} heatCells={heatCells} />
+    <PointLayer index={index} isDark={isDark} active={active} pointsOnly={pointsOnly} heatCells={heatCells} accentPoints={Boolean(boundary)} />
     <PointSelection index={index} onSelect={onSelect} active={active} pointsOnly={pointsOnly} />
     <Pane name="timeline-markers" style={{ zIndex: 460 }}>
     {first && <CircleMarker center={[first.lat, longitudeNear(first.lng, centerLng)]} radius={7} pathOptions={{ color: colors.border, weight: 2, fillColor: colors.route, fillOpacity: 1 }}>

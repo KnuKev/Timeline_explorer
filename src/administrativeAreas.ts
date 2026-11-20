@@ -17,7 +17,7 @@ export function hasAreaDataset(code: string): code is AreaCountry {
 export function analyseAdministrativeAreas(points: readonly TimelinePoint[], countryCode: AreaCountry, boundaries: CountryFeature[]): PlaceEntry[] {
   // Index local boundaries and require polygon containment.
   const lookup = createCountryLookup(boundaries, 1, 0)
-  const groups = new Map<string, { name: string; days: Set<string>; pointIds: string[] }>()
+  const groups = new Map<string, { name: string; boundary: CountryFeature; days: Set<string>; pointIds: string[] }>()
   for (const point of points) {
     const boundary = lookup(point.lat, point.lng)
     if (boundary?.id == null || !boundary.properties?.name) continue
@@ -26,14 +26,14 @@ export function analyseAdministrativeAreas(points: readonly TimelinePoint[], cou
     const key = `${countryCode}:${boundary.id}`
     let group = groups.get(key)
     if (!group) {
-      group = { name: boundary.properties.name, days: new Set(), pointIds: [] }
+      group = { name: boundary.properties.name, boundary, days: new Set(), pointIds: [] }
       groups.set(key, group)
     }
     group.pointIds.push(point.id)
     for (const date of dates) group.days.add(date)
   }
   return Array.from(groups, ([key, group]) => ({
-    key, countryCode, name: group.name, days: group.days.size, dates: [...group.days].sort().reverse(),
+    key, countryCode, boundary: group.boundary, name: group.name, days: group.days.size, dates: [...group.days].sort().reverse(),
     pointCount: group.pointIds.length, pointIds: group.pointIds,
   })).sort((a, b) => b.days - a.days || b.pointCount - a.pointCount || a.name.localeCompare(b.name))
 }
