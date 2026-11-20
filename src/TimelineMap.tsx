@@ -154,7 +154,7 @@ const AreaBoundary = memo(function AreaBoundary({ boundary, isDark, active }: {
 })
 
 type PointIndex = ReturnType<typeof createPointSpatialIndex>
-const PointLayer = memo(function PointLayer({ index, isDark, active, pointsOnly, heatCells, accentPoints }: { index: PointIndex; isDark: boolean; active: boolean; pointsOnly?: boolean; heatCells?: readonly HeatCell[]; accentPoints?: boolean }) {
+const PointLayer = memo(function PointLayer({ index, isDark, active, pointsOnly, heatCells }: { index: PointIndex; isDark: boolean; active: boolean; pointsOnly?: boolean; heatCells?: readonly HeatCell[] }) {
   const map = useMap()
   useEffect(() => {
     if (!active) return
@@ -196,10 +196,10 @@ const PointLayer = memo(function PointLayer({ index, isDark, active, pointsOnly,
       }
       const bounds = visibleWorldRects(map)
       const markers = pointsOnly ? bounds.flatMap(index.query) : index.sample(bounds, 5 / map.options.crs!.scale(map.getZoom()))
-      context.fillStyle = accentPoints ? '#0869e8' : colors.point
+      context.fillStyle = pointsOnly ? (isDark ? '#69a8ff' : '#0869e8') : colors.point
       context.strokeStyle = colors.border
       context.lineWidth = 1
-      context.globalAlpha = accentPoints ? 1 : pointsOnly ? .68 : 1
+      context.globalAlpha = pointsOnly ? .7 : 1
       context.beginPath()
       for (const point of markers) {
         const pixel = map.latLngToContainerPoint([point.lat, longitudeNear(point.lng, centerLng)])
@@ -242,7 +242,7 @@ const PointLayer = memo(function PointLayer({ index, isDark, active, pointsOnly,
       if (pending) cancelAnimationFrame(pending)
       canvas.remove()
     }
-  }, [map, index, isDark, active, pointsOnly, heatCells, accentPoints])
+  }, [map, index, isDark, active, pointsOnly, heatCells])
   return null
 })
 
@@ -402,7 +402,7 @@ const MapContents = memo(function MapContents(props: Props) {
     <ViewportAndControls points={points} selectedPoint={selected} language={language} active={active} boundary={boundary} />
     <AreaBoundary boundary={boundary} isDark={isDark} active={active} />
     {!pointsOnly && <RouteLayer segments={routeSegments} isDark={isDark} active={active} />}
-    <PointLayer index={index} isDark={isDark} active={active} pointsOnly={pointsOnly} heatCells={heatCells} accentPoints={Boolean(boundary)} />
+    <PointLayer index={index} isDark={isDark} active={active} pointsOnly={pointsOnly} heatCells={heatCells} />
     <PointSelection index={index} onSelect={onSelect} active={active} pointsOnly={pointsOnly} />
     <Pane name="timeline-markers" style={{ zIndex: 460 }}>
     {first && <CircleMarker center={[first.lat, longitudeNear(first.lng, centerLng)]} radius={7} pathOptions={{ color: colors.border, weight: 2, fillColor: colors.route, fillOpacity: 1 }}>
