@@ -573,7 +573,7 @@ function App() {
           {showingGlobe ? <Suspense fallback={<p className="globe-status" role="status">{t.loadingGlobe}</p>}>
             <TimelineGlobe active={activeTab === 'map'} points={mapPoints} routeSegments={route.segments} selectedPoint={selectedPoint}
               isDark={isDark} language={language} onSelect={setSelectedPointId} onUnavailable={globeUnavailable} />
-          </Suspense> : <TimelineMap points={mapPoints} routeSegments={route.segments} pointsOnly={isCityView} heatCells={heatCells} boundary={placeScope?.kind === 'area' && placeViewEnabled ? scopedPlace?.boundary : undefined}
+          </Suspense> : <TimelineMap points={mapPoints} routeSegments={route.segments} pointsOnly={isCityView} heatCells={heatCells} boundary={placeViewEnabled ? scopedPlace?.boundary : undefined} countryBoundary={placeScope?.kind === 'country'}
             selectedPointId={selectedPointId} isDark={isDark} language={language} onSelect={setSelectedPointId} active={activeTab === 'map'} />}
           {globeError && <p className="globe-status" role="status">{t.globeUnavailable}</p>}
 

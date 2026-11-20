@@ -16,6 +16,7 @@ import { createHeatColorRamp, createHeatKernel, drawCityHeatmap, type HeatCell }
 
 type Props = {
   boundary?: CountryFeature
+  countryBoundary?: boolean
   active?: boolean
   points: TimelinePoint[]
   routeSegments: RouteSegment[]
@@ -265,7 +266,7 @@ const PointSelection = memo(function PointSelection({ index, onSelect, active, p
   return null
 })
 
-function ViewportAndControls({ points, selectedPoint, language, active, boundary }: { points: TimelinePoint[]; selectedPoint: TimelinePoint | null; language: Language; active: boolean; boundary?: CountryFeature }) {
+function ViewportAndControls({ points, selectedPoint, language, active, boundary, countryBoundary }: { points: TimelinePoint[]; selectedPoint: TimelinePoint | null; language: Language; active: boolean; boundary?: CountryFeature; countryBoundary?: boolean }) {
   const map = useMap()
   const controls = useRef<HTMLDivElement>(null)
   const displayedPoints = useRef<TimelinePoint[] | null>(null)
@@ -276,16 +277,35 @@ function ViewportAndControls({ points, selectedPoint, language, active, boundary
   const bounds = useMemo(() => {
     if (boundary) {
       const center = points[0]?.lng ?? 0
-      return L.geoJSON({ ...boundary, type: 'Feature' } as GeoJsonObject, {
+      const geometryBounds = (geometry: CountryFeature['geometry']) => L.geoJSON({
+        type: 'Feature', properties: {}, geometry,
+      } as GeoJsonObject, {
         coordsToLatLng: coords => L.latLng(coords[1]!, longitudeNear(coords[0]!, center)),
       }).getBounds()
+      if (countryBoundary && boundary.geometry.type === 'MultiPolygon' && points[0]) {
+        // Focus on the part of the country nearest the records. Remote
+        // dependencies should not force a world overview of a mainland trip.
+        const anchor = points[0]
+        const polygons = boundary.geometry.coordinates as number[][][][]
+        const candidates = polygons.map(coordinates => geometryBounds({ type: 'Polygon', coordinates }))
+        const score = (bounds: L.LatLngBounds) => {
+          const dx = Math.max(bounds.getWest() - anchor.lng, 0, anchor.lng - bounds.getEast()) * Math.cos(anchor.lat * Math.PI / 180)
+          const dy = Math.max(bounds.getSouth() - anchor.lat, 0, anchor.lat - bounds.getNorth())
+          return dx * dx + dy * dy
+        }
+        candidates.sort((a, b) => score(a) - score(b))
+        const result = candidates[0]!
+        for (const point of points) result.extend([point.lat, longitudeNear(point.lng, center)])
+        return result
+      }
+      return geometryBounds(boundary.geometry)
     }
     if (!points.length) return null
     const result = L.latLngBounds([])
     for (const point of points) result.extend([point.lat, point.lng])
     const [west, east] = shortestLongitudeRange(points, result.getWest(), result.getEast())
     return L.latLngBounds([result.getSouth(), west], [result.getNorth(), east])
-  }, [points, boundary])
+  }, [points, boundary, countryBoundary])
   const fit = useCallback(() => {
     if (!active || !hasVisibleSize(map) || !bounds) return
     const midpoint = bounds.getCenter().lng
@@ -381,7 +401,7 @@ function ViewportAndControls({ points, selectedPoint, language, active, boundary
 }
 
 const MapContents = memo(function MapContents(props: Props) {
-  const { points, routeSegments, pointsOnly, heatCells, selectedPointId, isDark, language, onSelect, boundary, active = true } = props
+  const { points, routeSegments, pointsOnly, heatCells, selectedPointId, isDark, language, onSelect, boundary, countryBoundary, active = true } = props
   const index = useMemo(() => createPointSpatialIndex(points), [points])
   const selected = useMemo(() => points.find(point => point.id === selectedPointId) ?? null, [points, selectedPointId])
   const colors = getMapColors(isDark)
@@ -399,7 +419,7 @@ const MapContents = memo(function MapContents(props: Props) {
     return () => { map.off('moveend', update) }
   }, [active, map])
   return <>
-    <ViewportAndControls points={points} selectedPoint={selected} language={language} active={active} boundary={boundary} />
+    <ViewportAndControls points={points} selectedPoint={selected} language={language} active={active} boundary={boundary} countryBoundary={countryBoundary} />
     <AreaBoundary boundary={boundary} isDark={isDark} active={active} />
     {!pointsOnly && <RouteLayer segments={routeSegments} isDark={isDark} active={active} />}
     <PointLayer index={index} isDark={isDark} active={active} pointsOnly={pointsOnly} heatCells={heatCells} />

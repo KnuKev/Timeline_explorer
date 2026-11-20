@@ -6,7 +6,7 @@ type CityReference = { name: string; lat: number; lng: number; countryCode: stri
 export type CountryFeature = { id?: string | number; properties?: { name?: string }; geometry: { type: string; coordinates: unknown } }
 type PlaceEntry = { boundary?: CountryFeature; key: string; name: string; countryName?: string; countryCode?: string; days: number; dates: string[]; pointCount: number; pointIds: string[] }
 type PlaceAnalysis = { countries: PlaceEntry[]; cities: PlaceEntry[] }
-type PlaceIdentity = { key: string; name: string; countryCode?: string; countryName?: string }
+type PlaceIdentity = { boundary?: CountryFeature; key: string; name: string; countryCode?: string; countryName?: string }
 type PlaceMatch = { country: PlaceIdentity; city?: PlaceIdentity }
 type CityNode = { city: CityReference; position: [number, number, number]; index: number; axis: number; left?: CityNode; right?: CityNode }
 type CityCandidate = Pick<CityNode, 'city' | 'position' | 'index'>
@@ -117,7 +117,7 @@ function getMatcher(cities: CityReference[], countryCodes: Record<string, string
         const numericCode = String(country.id ?? '')
         const countryCode = countryCodes[numericCode] ?? countryCodes[numericCode.padStart(3, '0')]
         const name = countryCode ? displayNames.of(countryCode) ?? country.properties?.name ?? 'Ukjent land' : country.properties?.name ?? 'Ukjent land'
-        countryMatch = { country: { key: countryCode ?? name, name, countryCode } }
+        countryMatch = { country: { key: countryCode ?? name, name, countryCode, boundary: country } }
         countryMatches.set(country, countryMatch)
       }
       const identity = countryMatch.country
@@ -171,6 +171,7 @@ export function analysePlaces(points: TimelinePoint[], cities: CityReference[], 
   }
   const entries = (aggregates: Map<string, Aggregate>): PlaceEntry[] => Array.from(aggregates.values(), ({ identity, ids, days }) => ({
     key: identity.key, name: identity.name, countryCode: identity.countryCode,
+    ...(identity.boundary ? { boundary: identity.boundary } : {}),
     ...(identity.countryName === undefined ? {} : { countryName: identity.countryName }),
     days: days.size, dates: Array.from(days).sort().reverse(), pointCount: ids.length, pointIds: ids,
   })).sort(comparePlaces)
